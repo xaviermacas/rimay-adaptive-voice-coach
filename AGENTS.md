@@ -6,35 +6,46 @@ Rimay es una aplicación web accesible para práctica guiada del habla con datos
 
 Rimay es una herramienta de apoyo para práctica y seguimiento. No diagnostica disartria, no clasifica severidad, no prescribe tratamiento y no sustituye el criterio de un profesional.
 
-El repositorio se encuentra en el incremento documental inicial. Hasta que exista autorización expresa para el incremento siguiente, sólo se pueden modificar `AGENTS.md` y archivos bajo `docs/hackathon-build/`. No inicialices Git, React, Vite, Supabase, migraciones, funciones ni integraciones durante esta fase.
+Los incrementos 1 y 2 están completados. Antes de iniciar el incremento 3 se autorizó exclusivamente la actualización documental de la arquitectura de costo USD 0. Hasta que exista autorización expresa para ejecutar el nuevo incremento 3, sólo se pueden modificar `AGENTS.md` y archivos bajo `docs/hackathon-build/`. No escribas código, no agregues dependencias, no configures servicios y no hagas commit durante esta pausa documental.
 
 ## Arquitectura esperada
 
-- Frontend: React, Vite, TypeScript estricto y Tailwind CSS.
+- Frontend estático: React, Vite, TypeScript estricto y Tailwind CSS.
 - Captura: `MediaRecorder` con negociación de MIME en tiempo de ejecución y límites de 60 segundos o 10 MB.
-- Análisis: Web Audio API para decodificar PCM y calcular métricas deterministas y versionadas en el navegador.
+- Análisis de audio: Web Audio API para decodificar PCM y calcular métricas deterministas y versionadas en el navegador.
+- Reconocimiento opcional: `BrowserSpeechRecognizer` basado en `SpeechRecognition` o `webkitSpeechRecognition`, iniciado en paralelo con `MediaRecorder`, con resultados provisionales y finales en español.
+- Demostración: `DemoSpeechRecognizer` determinista, sin red y claramente identificado como texto predefinido que no analizó el audio.
+- Alternativa manual: el usuario puede omitir o abandonar el reconocimiento automático y escribir lo que intentó pronunciar; la interfaz identifica el origen manual y nunca lo presenta como transcripción automática.
+- Procesamiento textual: normalización, tokenización, similitud, coincidencias, omisiones, adiciones y palabras por minuto se calculan localmente mediante reglas versionadas y pruebas deterministas.
+- Retroalimentación, adaptación y resumen: motor local determinista con reglas versionadas, plantillas curadas, razones visibles y selección limitada al catálogo permitido.
 - Voz de salida: `SpeechSynthesis` con voz española cuando esté disponible y texto visible equivalente.
-- Backend privado: Supabase Edge Functions para transcripción y llamadas a OpenAI. Las claves privadas viven sólo en secretos de Supabase.
-- IA: `gpt-4o-transcribe` para transcripción y `gpt-5.6` mediante Responses API con salida estructurada para retroalimentación y resumen.
-- Proveedores: implementaciones `demo` y `live` detrás de contratos explícitos. `demo` es el modo predeterminado y no requiere secretos.
-- Persistencia del MVP: datos ficticios derivados en el navegador; el audio existe sólo de forma temporal y nunca se persiste.
-- Despliegue: Vercel para el frontend y Supabase para Edge Functions.
+- Persistencia del MVP: una clave versionada de `localStorage` conserva sólo sesiones ficticias y datos derivados; incluye una acción para eliminar todos los datos locales de Rimay. El audio nunca se persiste.
+- Despliegue: SPA estática en Vercel Hobby, dentro de sus límites gratuitos, sin Functions, add-ons, dominios comprados ni servicios conectados que puedan generar cargos.
+- Sin backend inicial: no se implementan Supabase, Edge Functions, OpenAI API, APIs comerciales ni integraciones que requieran facturación, prueba temporal o tarjeta de crédito.
+- Herramientas de construcción: Codex y GPT-5.6 pueden usarse durante diseño, implementación, revisión, pruebas y documentación; no son dependencias ni servicios runtime de Rimay.
 
 Consulta `docs/hackathon-build/spec.md` antes de tomar decisiones de arquitectura o de contratos.
 
-## Comandos del proyecto
+## Restricción de costo USD 0
 
-Estos comandos son el contrato objetivo a partir del incremento de scaffold. Todavía no funcionan porque no existe `package.json`.
+- Ninguna función runtime de Rimay puede requerir una API key, cuenta facturable, tarjeta, crédito promocional o prueba temporal.
+- No introduzcas OpenAI API, `gpt-4o-transcribe`, GPT-5.6 API, Responses API, Supabase ni proveedores comerciales de transcripción en el MVP.
+- No habilites planes Pro, add-ons, analytics pagos, almacenamiento remoto, funciones serverless ni dominios comprados.
+- Si Vercel Hobby alcanza un límite gratuito, el despliegue debe esperar al restablecimiento del cupo o continuar localmente; nunca debe activar facturación.
+- Antes de incorporar una dependencia o servicio, demuestra que no requiere pago en instalación, prueba, build, despliegue ni runtime.
+
+## Comandos del proyecto
 
 ```text
 npm install
 npm run dev
+npm run lint
 npm run typecheck
 npm test
 npm run build
 ```
 
-Cuando se incorpore lint, deberá ejecutarse con `npm run lint`. Los comandos adicionales de Supabase deberán descubrirse con `supabase --help` y documentarse antes de usarlos; no se deben adivinar opciones de la CLI.
+No se necesitan comandos de Supabase ni de una API externa para construir, probar o desplegar el MVP.
 
 ## Flujo de trabajo obligatorio
 
@@ -42,24 +53,24 @@ Cuando se incorpore lint, deberá ejecutarse con `npm run lint`. Los comandos ad
 2. Trabaja en un solo incremento autorizado. No adelantes archivos, dependencias o comportamiento de incrementos posteriores.
 3. Conserva el árbol en un estado verificable. Después de cada cambio ejecuta la comprobación más pequeña que pueda falsarlo.
 4. Antes de finalizar, ejecuta como mínimo `npm run typecheck`, `npm test` y `npm run build` cuando esos comandos existan. Para cambios de interfaz, realiza además una comprobación manual del flujo afectado.
-5. Revisa el diff completo y confirma que no contiene claves, datos sensibles, audio, transcripciones en logs ni cambios fuera de alcance.
+5. Revisa el diff completo y confirma que no contiene claves, datos sensibles, audio, transcripciones en logs, servicios cobrables ni cambios fuera de alcance.
 6. Informa con precisión qué se verificó, qué no se pudo verificar y por qué.
 7. Detente al cumplir la aceptación del incremento. No avances al siguiente incremento sin autorización expresa del responsable del proyecto.
 
-Durante la fase documental, reemplaza los comandos aún inexistentes por comprobaciones de presencia, enlaces, cobertura y consistencia mediante lectura y búsqueda de texto.
+Durante una fase exclusivamente documental, reemplaza los comandos de producto por comprobaciones de presencia, enlaces, cobertura, costo y consistencia mediante lectura, búsqueda de texto y revisión del diff.
 
 ## Convenciones de TypeScript
 
-- Mantén `strict` activado. Habilita también `noUncheckedIndexedAccess` y `exactOptionalPropertyTypes` cuando se cree el `tsconfig`.
+- Mantén `strict`, `noUncheckedIndexedAccess` y `exactOptionalPropertyTypes`.
 - No uses `any`. Para entradas desconocidas, usa `unknown` y valídalas antes de acceder a sus campos.
-- Valida todas las fronteras externas con esquemas de ejecución; los tipos estáticos no sustituyen la validación de red, almacenamiento o IA.
-- Usa uniones discriminadas para estados asíncronos y de grabación. Evita combinaciones de booleanos que permitan estados imposibles.
+- Valida todas las fronteras del navegador y del almacenamiento con esquemas de ejecución; los tipos estáticos no sustituyen la validación runtime.
+- Usa uniones discriminadas para estados asíncronos, de grabación y de reconocimiento. Evita combinaciones de booleanos que permitan estados imposibles.
 - Mantén puras las métricas, la normalización de texto, la validación y la selección adaptativa.
 - Incluye unidades en los nombres (`durationMs`, `sizeBytes`) y usa fechas ISO 8601.
 - Usa `import type` para importaciones exclusivamente de tipos y evita aserciones de tipo salvo justificación localizada.
 - Usa identificadores y nombres de archivo en inglés; todo el contenido visible para el usuario debe estar en español neutro.
 - Prefiere módulos pequeños organizados por funcionalidad. No agregues abstracciones o dependencias sin una necesidad demostrable.
-- No mezcles tipos de dominio con respuestas crudas de proveedores. Traduce cada frontera a contratos internos compartidos.
+- No mezcles tipos de dominio con eventos crudos de APIs del navegador. Traduce cada frontera a contratos internos compartidos.
 
 ## Accesibilidad
 
@@ -69,7 +80,7 @@ Durante la fase documental, reemplaza los comandos aún inexistentes por comprob
 - Los objetivos interactivos principales deben medir al menos 44 por 44 píxeles CSS.
 - No comuniques estado, calidad o éxito únicamente mediante color, sonido, forma o posición.
 - Toda instrucción y retroalimentación hablada debe existir también como texto visible. El usuario debe poder escuchar, detener y repetir el audio.
-- No reproduzcas audio ni avances de ejercicio sin una acción o confirmación clara del usuario.
+- No reproduzcas audio, inicies reconocimiento ni avances de ejercicio sin una acción o confirmación clara del usuario.
 - Anuncia estados asíncronos y errores mediante regiones de estado apropiadas sin mover el foco de forma sorpresiva.
 - Usa lenguaje corto, concreto y respetuoso. Evita presión de tiempo, animaciones innecesarias y controles pequeños.
 - Los errores deben identificar el problema y una acción recuperable, sin culpar al usuario.
@@ -77,27 +88,26 @@ Durante la fase documental, reemplaza los comandos aún inexistentes por comprob
 
 ## Seguridad y privacidad
 
-- Nunca expongas `OPENAI_API_KEY`, claves secretas de Supabase ni `service_role` en el frontend, variables `VITE_*`, repositorio, pruebas o logs.
-- El frontend sólo puede contener valores expresamente publicables. Las llamadas a OpenAI se realizan desde Edge Functions.
-- No uses datos reales de pacientes. Nombres, sesiones, audios, transcripciones y ejercicios de prueba deben ser ficticios.
-- No registres audio, transcripciones, prompts completos, identificadores personales ni payloads de sesión en consola o telemetría.
-- El audio se conserva sólo en memoria durante grabación, reproducción y envío. Revoca las URL de objeto y libera pistas y buffers al finalizar.
-- Aplica límites de tamaño, duración, MIME, tiempo de espera y origen antes de enviar datos a proveedores.
-- No cambies silenciosamente de `live` a `demo`; el modo y el origen simulado de los datos deben ser visibles.
-- Valida respuestas de IA por esquema y reglas de dominio antes de mostrarlas o aplicarlas.
-- GPT no calcula métricas, no recibe audio y no puede seleccionar ejercicios fuera de la lista permitida.
-- No introduzcas almacenamiento remoto, autenticación o RLS hasta que un incremento los autorice y defina su modelo de acceso.
-- Fija versiones de dependencias directas y conserva el lockfile cuando se inicialice el proyecto.
+- No uses datos reales de pacientes. Nombres, sesiones, audios, textos reconocidos y ejercicios de prueba deben ser ficticios.
+- No registres audio, PCM, textos reconocidos o manuales, identificadores personales ni documentos de sesión en consola o telemetría.
+- El `Blob` de `MediaRecorder` se conserva sólo en memoria durante grabación, reproducción y análisis local. Rimay no lo envía ni lo almacena. Revoca las URL de objeto y libera pistas y buffers al finalizar.
+- Antes de iniciar `BrowserSpeechRecognizer`, la interfaz debe informar que algunos navegadores pueden enviar audio a un servicio remoto propio para realizar `SpeechRecognition`. Ese procesamiento pertenece al navegador, no a un proveedor contratado por Rimay.
+- El reconocimiento automático es opcional. Debe existir una ruta manual siempre disponible, incluida la ausencia de soporte, red, silencio, permiso o cancelación.
+- No presentes texto provisional como final; conserva la procedencia `browser`, `demo` o `manual` en el contrato y en la interfaz.
+- `DemoSpeechRecognizer` no recibe ni inspecciona el `Blob` y no puede afirmar que transcribió o analizó la voz.
+- No introduzcas secretos, variables privadas, `fetch` a APIs de análisis, almacenamiento remoto, autenticación o RLS en el MVP.
+- `localStorage` sólo puede contener el documento versionado de sesiones ficticias y datos derivados permitidos. La eliminación total debe borrar todas las claves de Rimay y limpiar el estado en memoria sin afectar datos de otros sitios.
+- Fija versiones de dependencias directas y conserva el lockfile.
 
 ## Restricciones médicas y editoriales
 
-- Describe observaciones de la grabación; no infieras diagnóstico, etiología, pronóstico o severidad.
+- Describe observaciones del intento; no infieras diagnóstico, etiología, pronóstico o severidad.
 - No uses etiquetas como “normal”, “anormal”, “leve”, “moderada”, “grave”, “mejoró clínicamente” o equivalentes para clasificar a una persona.
 - No recomiendes cambios de tratamiento, medicación, frecuencia terapéutica ni consulta urgente basándote en las métricas.
-- No presentes similitud, palabras por minuto, volumen, pausas o clipping como puntuaciones clínicas.
+- No presentes similitud, coincidencias, omisiones, adiciones, palabras por minuto, volumen, pausas o clipping como puntuaciones clínicas.
 - Toda retroalimentación debe ser breve, alentadora, no clínica y limitada al intento actual.
-- La vista profesional debe separar métricas calculadas, observaciones generadas por IA y decisión profesional.
-- Si una salida viola estas reglas, descártala y usa el fallback determinista previsto.
+- La vista profesional debe separar métricas calculadas, decisiones del motor de reglas, limitaciones y decisión profesional.
+- Toda acción adaptativa debe incluir versión de reglas, plantilla, razón y evidencia determinista.
 
 ## Fuentes normativas
 
@@ -106,4 +116,3 @@ Durante la fase documental, reemplaza los comandos aún inexistentes por comprob
 - Arquitectura y contratos: `docs/hackathon-build/spec.md`
 - Orden de construcción: `docs/hackathon-build/checklist.md`
 - Decisiones y dudas: `docs/hackathon-build/build-notes.md`
-

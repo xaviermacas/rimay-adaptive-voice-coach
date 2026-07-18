@@ -194,70 +194,115 @@ La diferencia pequeña entre duración capturada y duración decodificada se con
 
 **Cierre:** la validación manual final fue completada correctamente y el incremento 2 queda cerrado. No se autoriza trabajo del incremento 3 mediante este cierre.
 
+## Registro de la pausa documental antes del incremento 3
+
+- Fecha: 2026-07-18.
+- Estado: revisión documental de costo USD 0 completada; implementación del incremento 3 no iniciada y no autorizada mediante esta revisión.
+- Alcance ejecutado: únicamente `AGENTS.md` y los cinco documentos normativos bajo `docs/hackathon-build/`.
+- Motivo: decisión confirmada de no usar servicios de pago, facturación, pruebas temporales, créditos promocionales ni proveedores que exijan tarjeta.
+- Arquitectura retirada del plan: OpenAI API, `gpt-4o-transcribe`, GPT-5.6 API, Responses API, Supabase y las Edge Functions `transcribe-attempt`, `coach-attempt` y `summarize-session`.
+- Arquitectura de reconocimiento nueva: `BrowserSpeechRecognizer` sobre `SpeechRecognition` o `webkitSpeechRecognition`, `DemoSpeechRecognizer` determinista sin audio/red y entrada manual siempre disponible.
+- Privacidad: el `Blob` de `MediaRecorder` permanece exclusivamente en memoria; Rimay no lo envía ni almacena. La UI debe advertir que el navegador podría usar un servicio remoto propio para reconocimiento.
+- Procesamiento nuevo: `text-metrics-v1` calcula normalización, tokens, WPM, similitud, coincidencias, omisiones y adiciones localmente.
+- Coaching nuevo: `coach-rules-v1` y `summary-rules-v1` usan reglas versionadas, plantillas curadas, evidencia y catálogo permitido; no existe IA runtime.
+- Infraestructura nueva: SPA estática en Vercel Hobby, sin Functions, add-ons, dominios comprados, backend o almacenamiento remoto.
+- Persistencia: `rimay.demo.v1` conserva sólo sesiones ficticias y datos derivados permitidos; se añadió eliminación completa de datos locales.
+- Herramientas de construcción: Codex y GPT-5.6 se documentan únicamente como asistencia durante diseño, implementación, revisión, pruebas y documentación.
+- Devpost: queda prohibido afirmar que GPT-5.6 genera feedback o resúmenes en runtime; debe describirse el motor local, determinista y gratuito.
+- Verificación documental ejecutada: los seis archivos requeridos existen; las referencias a servicios retirados aparecen sólo como historial, exclusión o prueba negativa; los bloques de código están balanceados; `git diff --check` no reportó errores; el diff contiene exclusivamente `AGENTS.md` y los cinco documentos solicitados.
+- Comandos de producto: no se ejecutaron `npm run lint`, `npm run typecheck`, `npm test` ni `npm run build` porque esta pausa no modificó código y el flujo documental ordena sustituirlos por comprobaciones de cobertura y consistencia.
+- Git: no se creó commit y el incremento 3 permanece sin iniciar.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |
 | --- | --- | --- |
-| D-001 | El MVP usa un selector local paciente/profesional sin login. | Reduce alcance de hackathon. La revisión ocurre en el mismo navegador y no representa un modelo de acceso clínico. |
-| D-002 | El audio es estrictamente temporal. | Puede reproducirse antes del envío, pero no se guarda en `localStorage`, Supabase Storage ni base de datos. La vista profesional no tendrá audio histórico. |
-| D-003 | La voz de salida usa `SpeechSynthesis`. | Evita otra clave, coste y latencia. Siempre habrá texto visible y controles para escuchar, detener y repetir. |
-| D-004 | `demo` es el modo predeterminado. | Debe completar todo el recorrido con fixtures y proveedores deterministas, sin red ni secretos. |
-| D-005 | No existe fallback silencioso de live a demo. | El usuario debe saber si una respuesta es simulada. Un error live muestra recuperación o permite cambiar de modo explícitamente. |
-| D-006 | Las métricas se calculan fuera de GPT. | Web Audio produce un contrato versionado. GPT recibe valores ya calculados y nunca recibe el audio. |
-| D-007 | La IA no controla directamente la adaptación. | La aplicación genera candidatos permitidos; GPT sólo puede sugerir uno y la selección final se valida. |
-| D-008 | La sesión tiene cinco intentos válidos. | Los tres primeros cubren palabra, frase y lectura guiada; los dos últimos permiten adaptación. Una única recaptura por calidad no cuenta. |
-| D-009 | El frontend se despliega en Vercel y las llamadas privadas en Supabase Edge Functions. | `OPENAI_API_KEY` y otras claves privadas quedan en secretos de Supabase, nunca en `VITE_*`. |
-| D-010 | Se usará npm y TypeScript estricto. | Los comandos objetivo serán estables y el lockfile deberá versionarse desde el scaffold. |
-| D-011 | Compatibilidad primaria: Chrome y Edge de escritorio actuales. | Otros navegadores deben negociar formato o presentar un error accesible; no se fingirá compatibilidad. |
-| D-012 | Todo el contenido de la demostración es ficticio. | Incluso en live no se aceptan datos reales de pacientes. |
+| D-001 | El MVP usa un selector local paciente/profesional sin login. | La revisión ocurre en el mismo navegador y no representa un modelo de acceso clínico. |
+| D-002 | El audio es estrictamente temporal. | El `Blob` puede reproducirse y analizarse localmente, pero Rimay no lo envía ni lo guarda. La vista profesional no tiene audio histórico. |
+| D-003 | La voz de salida usa `SpeechSynthesis`. | Evita claves, costo y latencia. Siempre hay texto visible y controles para escuchar, detener y repetir. |
+| D-004 | El modo demo usa `DemoSpeechRecognizer`. | Completa el recorrido sin red ni secretos mediante fixtures deterministas y declara que no analizó el audio. |
+| D-005 | El reconocimiento automático es opcional. | `BrowserSpeechRecognizer` se usa sólo tras aviso y elección; la entrada manual está disponible desde el inicio y como recuperación. |
+| D-006 | Rimay no envía el `Blob`. | `BrowserSpeechRecognizer` escucha mediante la API del navegador en paralelo; no recibe el archivo de `MediaRecorder`. |
+| D-007 | Se informa la frontera de privacidad del navegador. | Algunos navegadores pueden usar un servicio remoto propio; Rimay no promete reconocimiento local u offline. |
+| D-008 | Las métricas de audio y texto se calculan localmente. | `audio-metrics-v1` y `text-metrics-v1` son deterministas, versionados y no clínicos. |
+| D-009 | Retroalimentación, adaptación y resumen son deterministas. | Reglas y plantillas locales reemplazan GPT; toda acción incluye versión, razón y evidencia. |
+| D-010 | La sesión tiene cinco intentos válidos. | Los tres primeros cubren palabra, frase y lectura guiada; los restantes permiten adaptación acotada. |
+| D-011 | Persistencia sólo en `localStorage`. | `rimay.demo.v1` guarda sesiones ficticias y datos derivados; existe eliminación total y nunca se persiste audio. |
+| D-012 | El MVP no usa Supabase ni backend. | No hay Edge Functions, Database, Storage, Auth, RLS, migraciones o secretos. |
+| D-013 | El MVP no usa APIs de OpenAI en runtime. | OpenAI API, `gpt-4o-transcribe`, GPT-5.6 API y Responses API quedan excluidos. |
+| D-014 | El frontend estático se despliega en Vercel Hobby. | Se usa el subdominio gratuito, sin Functions, add-ons, prueba Pro, dominio comprado ni tarjeta. |
+| D-015 | Se usa npm y TypeScript estricto. | Los comandos y lockfile permanecen como contrato reproducible. |
+| D-016 | Compatibilidad primaria: Chrome y Edge de escritorio actuales. | Otros navegadores reciben detección de soporte y ruta manual; no se finge compatibilidad. |
+| D-017 | Todo el contenido de la demostración es ficticio. | No se aceptan pacientes, audio o historias clínicas reales. |
+| D-018 | Codex y GPT-5.6 son herramientas de construcción. | Pueden asistir al equipo, pero no son servicios runtime ni requisitos para ejecutar Rimay. |
+
+Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan sustituidas por D-004 a D-018 desde esta pausa documental.
 
 ## Decisiones técnicas de referencia
 
 - Captura máxima: 60 segundos o 10 MB, lo que ocurra primero.
-- Orden previsto de MIME: `audio/webm;codecs=opus`, `audio/webm`, `audio/mp4` y, finalmente, el formato predeterminado del navegador si además puede decodificarse y enviarse.
-- Algoritmo inicial: `audio-metrics-v1`, con ventanas de 20 ms y umbrales documentados en `spec.md`.
-- Transcripción live: `gpt-4o-transcribe` mediante `transcribe-attempt`.
-- Retroalimentación y resumen live: alias solicitado `gpt-5.6` mediante Responses API y Structured Outputs.
-- Funciones previstas: `transcribe-attempt`, `coach-attempt` y `summarize-session`.
-- Clave de persistencia local prevista: `rimay.demo.v1`, con número de versión dentro del documento guardado.
-- No se usa Supabase Database ni Storage en este MVP. Supabase aporta el límite de servidor mediante Edge Functions.
+- Orden de MIME: `audio/webm;codecs=opus`, `audio/webm`, `audio/mp4` y formato predeterminado sólo si Web Audio puede decodificarlo.
+- Audio: `audio-metrics-v1` conserva las fórmulas verificadas en el incremento 2.
+- Texto: `text-metrics-v1` usa normalización española, Levenshtein por tokens y alineación LCS estable.
+- Reconocimiento browser: tag inicial `es-EC`, resultados provisionales y finales, error mapping y alternativa manual.
+- Reconocimiento demo: fixtures por IDs conocidos, sin `fetch` y sin acceso al audio.
+- Coaching: `coach-rules-v1`; resumen: `summary-rules-v1`.
+- Persistencia: clave `rimay.demo.v1`, máximo 20 sesiones ficticias y lista explícita de claves para eliminación total.
+- Despliegue: build estático Vite en Vercel Hobby; no se prevén variables de entorno runtime.
 
-## Riesgos conocidos y mitigaciones iniciales
+## Elementos pagados eliminados
+
+- `OPENAI_API_KEY` y cualquier otro secreto de proveedor.
+- OpenAI Audio Transcriptions y `gpt-4o-transcribe`.
+- GPT-5.6 API, Responses API y Structured Outputs runtime.
+- Las funciones `transcribe-attempt`, `coach-attempt` y `summarize-session`.
+- Supabase CLI, proyecto, Edge Functions, Database, Storage, Auth, RLS y migraciones.
+- Clientes `live`, CORS de funciones, rate limiting remoto y variables `VITE_SUPABASE_*`.
+- APIs comerciales de transcripción y servicios con prueba temporal.
+- Vercel Pro, pago por uso, Functions, add-ons, recursos de almacenamiento y dominio comprado.
+- Cualquier requisito de tarjeta de crédito.
+
+## Riesgos conocidos y mitigaciones
 
 | Riesgo | Mitigación prevista |
 | --- | --- |
-| Diferencias de codec y decodificación | Negociar MIME con `isTypeSupported`, registrar sólo el código de error y probar primero en Chrome/Edge. |
-| Ruido ambiental altera la actividad de voz | Umbral derivado del piso de ruido, banderas de calidad y fixtures sintéticos; nunca interpretar clínicamente. |
-| Transcripción imprecisa de habla disártrica | Mostrar la transcripción como aproximación, permitir reintento y no convertir similitud en severidad. |
-| Latencia, CORS o límites de Edge Functions | Prueba técnica temprana, límite de payload, timeout, preflight y errores tipados. |
-| GPT inventa números o lenguaje clínico | No pedir valores numéricos, exigir esquema estricto, referencias de evidencia, lista permitida y fallback determinista. |
-| Voz española no disponible | Buscar una voz `es-*`; conservar texto visible y mostrar un aviso no bloqueante si sólo se puede leer. |
+| Diferencias de codec y decodificación | Negociar MIME con `isTypeSupported` y probar Chrome/Edge; no fabricar métricas si falla Web Audio. |
+| Ruido ambiental altera actividad de voz | Umbrales versionados, flags técnicas y fixtures sintéticos; nunca interpretar clínicamente. |
+| Web Speech no está soportado en todos los navegadores | Detectar constructor estándar/prefijado y ofrecer entrada manual siempre. |
+| El navegador usa reconocimiento remoto | Aviso previo, consentimiento explícito y opción de omitir reconocimiento; Rimay nunca envía el `Blob`. |
+| Red, permiso, silencio o cancelación impiden texto final | Errores tipados, conservar captura temporal y enfocar entrada manual. |
+| Reconocimiento impreciso de habla disártrica | Mostrarlo como aproximación, conservar procedencia, permitir edición manual y no convertir similitud en severidad. |
+| Resultados provisionales cambian o no finalizan | Mostrar estado provisional; sólo final o manual se vuelve resultado estable. |
+| Reglas parecen una evaluación clínica | Plantillas curadas, evidencia técnica, filtro editorial y aviso no clínico junto a métricas. |
+| Persistencia local queda corrupta o excede cuota | Validación runtime, máximo 20 sesiones y continuidad en memoria. |
+| Borrado local incompleto | Registro de claves propias, verificación posterior y mensaje de error si queda alguna; no usar `clear()`. |
+| Vercel Hobby cambia límites o condiciones | Revisar documentación antes del despliegue; no activar pago y aceptar pausa al agotar cupo. |
+| Voz española no disponible | Buscar voz `es-*`; conservar texto y mostrar aviso no bloqueante. |
 | Accesibilidad motora o cognitiva insuficiente | Controles grandes, teclado, foco visible, sin tiempo forzado ni avance automático, mensajes breves. |
-| Demo pública sin autenticación | Usar sólo fixtures y almacenamiento local; no ofrecer acceso compartido ni datos reales. |
 
 ## Dudas pendientes no bloqueantes
 
-Estas preguntas deben resolverse antes del incremento que las necesite, no durante esta fase:
+Estas preguntas deben resolverse en el incremento que las necesite:
 
-- ¿Qué cuentas, proyectos y presupuestos de OpenAI, Supabase y Vercel estarán disponibles para la demo live?
-- ¿Qué versiones y hardware exactos de Chrome o Edge se usarán en la presentación?
-- ¿Qué profesional revisará las palabras, frases, pausas guiadas y el tono final del contenido ficticio?
-- ¿Los umbrales de `audio-metrics-v1` se comportan de forma útil con muestras ficticias variadas de ruido, volumen y velocidad? Cualquier ajuste exige una nueva versión del algoritmo.
-- ¿Cuáles serán los orígenes exactos de localhost, preview y producción permitidos por CORS?
-- ¿Qué región de Supabase ofrece la latencia más estable para la sede de la demostración?
+- ¿Qué versiones, sistema operativo y políticas exactas de Chrome y Edge se usarán en la presentación?
+- ¿`es-EC` ofrece resultados estables en ambos navegadores objetivo o debe definirse otro tag español para el demo, sin fallback silencioso?
+- ¿Qué profesional revisará el catálogo, las plantillas, las pausas guiadas y el tono final del contenido ficticio?
+- ¿Los umbrales de `audio-metrics-v1` se comportan de forma útil con muestras ficticias variadas? Cualquier ajuste exige nueva versión.
+- ¿Qué límites y condiciones de Vercel Hobby están vigentes en la fecha real del despliegue?
+- ¿La presentación se realizará con red disponible para el reconocimiento browser o debe usar principalmente demo/manual?
 
 ## Fuentes consultadas
 
-- [GPT-5.6 Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
-- [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
-- [Speech to text](https://developers.openai.com/api/docs/guides/speech-to-text)
-- [Supabase Edge Functions](https://supabase.com/docs/guides/functions)
-- [CORS para Edge Functions](https://supabase.com/docs/guides/functions/cors)
-- [Changelog de cambios incompatibles de Supabase](https://supabase.com/changelog?tags=breaking-change)
+- [SpeechRecognition](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition)
+- [Errores de SpeechRecognition](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognitionErrorEvent/error)
+- [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API)
 - [MediaRecorder.isTypeSupported](https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder/isTypeSupported_static)
+- [Vercel Hobby](https://vercel.com/docs/plans/hobby)
+- [Límites de Vercel](https://vercel.com/docs/limits)
+- [Precios de Vercel](https://vercel.com/pricing)
 - [WCAG 2.2](https://www.w3.org/TR/WCAG22/)
 - [Guía de Vite](https://vite.dev/guide/)
 - [Tailwind CSS con Vite](https://tailwindcss.com/docs/installation/using-vite)
 - [Guía de Vitest](https://vitest.dev/guide/)
 
-Las fuentes cambiantes deben revisarse otra vez en el incremento donde se instalen dependencias o se implementen las integraciones.
+Las fuentes cambiantes deben revisarse otra vez en el incremento donde se implemente Web Speech o se despliegue en Vercel.

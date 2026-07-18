@@ -2,12 +2,13 @@
 
 ## Reglas de uso
 
-- Esta lista comienza después de la fase documental actual.
 - Ejecuta un solo incremento por autorización.
 - Cada incremento debe terminar con árbol compilable, pruebas existentes en verde y evidencia de su aceptación.
 - No crees anticipadamente archivos o dependencias de incrementos posteriores.
 - Después de cada incremento, actualiza `build-notes.md`, ejecuta las verificaciones indicadas, revisa el diff completo y detente.
 - Si un riesgo técnico invalida la arquitectura, actualiza primero `spec.md` y solicita autorización antes de ampliar alcance.
+- Ningún incremento puede introducir facturación, tarjeta, prueba temporal, OpenAI, Supabase, Edge Functions, APIs comerciales o recursos pagos de Vercel.
+- El runtime, las pruebas y el despliegue deben conservar costo USD 0.
 
 ## Incremento 1 — Scaffold mínimo y prueba de grabación
 
@@ -57,7 +58,7 @@ Además, recorrido manual por teclado en Chrome y Edge, inspección de consola y
 - [x] Chrome: Network confirmó que el audio no se envía; Storage no contiene audio, secretos ni datos sensibles.
 - [x] Edge: permiso, grabación, reproducción y liberación del micrófono aprobados; consola sin errores.
 
-**Cierre:** el responsable confirmó que la validación manual final del incremento 1 fue completada correctamente. Todos los criterios de aceptación y verificación del incremento están cubiertos. Cualquier trabajo del incremento 2 requiere una nueva autorización explícita.
+**Cierre:** el responsable confirmó que la validación manual final del incremento 1 fue completada correctamente.
 
 ## Incremento 2 — Procesamiento PCM y métricas deterministas
 
@@ -65,21 +66,21 @@ Además, recorrido manual por teclado en Chrome y Edge, inspección de consola y
 
 **Objetivo**
 
-Decodificar una captura y producir `audio-metrics-v1` de forma pura, reproducible y probada antes de depender de servicios externos.
+Decodificar una captura y producir `audio-metrics-v1` de forma pura, reproducible y probada en el navegador.
 
 **Archivos previstos**
 
 - `src/domain/audio/` para PCM, ventanas, segmentos y métricas.
 - Fixtures sintéticos en `src/test/fixtures/audio/`.
-- Pruebas unitarias de métricas y normalización.
+- Pruebas unitarias de métricas.
 - Presentación temporal de resultados en la prueba de grabación.
 
 **Aceptación**
 
-- Se implementan exactamente los umbrales y fórmulas de `spec.md`.
+- Se implementan exactamente los umbrales y fórmulas de `spec.md` vigentes para `audio-metrics-v1`.
 - Silencio, voz sintética, pausas, clipping, multicanal y audio corto producen resultados esperados.
 - La misma entrada genera el mismo objeto, incluido `algorithmVersion`.
-- Los valores basados en texto son `null` sin transcripción.
+- Los valores basados en texto son `null` porque todavía no existe texto utilizable.
 - Un fallo de decodificación no inventa métricas ni destruye el reproductor si sigue siendo utilizable.
 
 **Verificación**
@@ -95,12 +96,11 @@ Comparar además una grabación real con los resultados visibles y confirmar que
 
 **Evidencia de implementación — 2026-07-18**
 
-- [x] `audio-metrics-v1` implementa los umbrales y fórmulas de `spec.md` en módulos puros sin dependencias de React.
-- [x] Fixtures sintéticos programáticos cubren silencio, seno continuo, pausas conocidas, unión inferior a 200 ms, límite exacto de 200 ms, transitorio inferior a 120 ms, clipping, captura corta y silenciosa, estéreo y frecuencias de 8/48 kHz.
+- [x] `audio-metrics-v1` implementado en módulos puros sin dependencias de React.
+- [x] Fixtures sintéticos cubren silencio, seno continuo, pausas, límites, transitorios, clipping, captura corta, estéreo y frecuencias de 8/48 kHz.
 - [x] Entradas vacías, no finitas, multicanal inconsistente y configuración inválida devuelven errores tipados sin métricas fabricadas.
-- [x] `AudioContext.decodeAudioData` se prueba con éxito, fallo, Web Audio ausente y cierre del contexto; el reproductor permanece disponible ante error.
-- [x] La interfaz presenta progreso, resultado técnico redondeado, versión del algoritmo, aviso no clínico y acciones para reanalizar o descartar.
-- [x] Prueba de integración: Blob grabado simulado → decodificación Web Audio simulada → presentación del resultado.
+- [x] `AudioContext.decodeAudioData` se prueba con éxito, fallo, Web Audio ausente y cierre del contexto.
+- [x] La interfaz presenta progreso, resultado técnico, versión del algoritmo y aviso no clínico.
 - [x] `npm.cmd run lint`: código 0, sin errores ni advertencias.
 - [x] `npm.cmd run typecheck`: código 0.
 - [x] `npm.cmd test -- audio`: 3 archivos y 37 pruebas aprobadas.
@@ -108,132 +108,165 @@ Comparar además una grabación real con los resultados visibles y confirmar que
 - [x] `npm.cmd run build`: 28 módulos transformados y build de producción generado.
 - [x] Validación manual en Chrome y Edge con grabaciones reales, Network, Storage y consola.
 
-**Cierre:** el responsable confirmó la validación manual final en Chrome y Edge. Todos los criterios de aceptación y verificación del incremento 2 están cubiertos. Cualquier trabajo del incremento 3 requiere una nueva autorización explícita.
+**Cierre:** el responsable confirmó la validación manual final del incremento 2.
 
-## Incremento 3 — Prueba live de transcripción
+## Pausa documental de costo USD 0
 
-**Objetivo**
+**Estado: COMPLETADA — 2026-07-18**
 
-Probar de extremo a extremo la compatibilidad MediaRecorder → Supabase Edge Function → `gpt-4o-transcribe` con audio ficticio, antes de construir el flujo completo.
+Antes del incremento 3 se reemplazó el plan anterior de Supabase/OpenAI por Web Speech opcional, entrada manual, procesamiento local, reglas deterministas, `localStorage` y Vercel Hobby. Esta pausa sólo modifica documentación. No autoriza el incremento 3.
 
-**Archivos previstos**
+## Incremento 3 — Reconocimiento del navegador, demo, entrada manual y métricas textuales
 
-- `supabase/config.toml`.
-- `supabase/functions/_shared/` para CORS, errores y validación.
-- `supabase/functions/transcribe-attempt/`.
-- `src/providers/live/transcriber` y su adaptación al contrato.
-- Pruebas del handler y del proveedor.
-
-**Aceptación**
-
-- La clave OpenAI sólo existe en secretos de Supabase.
-- La función acepta un único archivo permitido de hasta 10 MB y rechaza métodos, orígenes, MIME y tamaños inválidos.
-- Audio WebM ficticio grabado en el navegador devuelve un `TranscriptionResult` válido.
-- Timeout, upstream error y texto vacío producen códigos estables sin filtrar payloads.
-- La función no persiste ni registra audio o transcripción.
-
-**Verificación**
-
-```text
-npm run typecheck
-npm test -- transcriber
-npm test
-npm run build
-supabase --help
-```
-
-Descubrir con `supabase functions --help` el comando vigente, servir localmente, probar éxito y rechazo de payload, e inspeccionar logs sanitizados.
-
-## Incremento 4 — GPT-5.6 estructurado y fallbacks
+**Estado: PENDIENTE — REQUIERE AUTORIZACIÓN EXPRESA**
 
 **Objetivo**
 
-Validar el segundo riesgo externo: Responses API con `gpt-5.6`, JSON Schema estricto, reglas no clínicas y fallbacks deterministas, aún sin integrar toda la experiencia.
+Resolver el principal riesgo restante sin servicios contratados: ejecutar `BrowserSpeechRecognizer` en paralelo con `MediaRecorder`, proporcionar `DemoSpeechRecognizer` y entrada manual, y producir `text-metrics-v1` local y determinista.
 
 **Archivos previstos**
 
-- Contratos y esquemas de coaching/resumen en `src/domain/contracts/`.
-- Validación editorial, evidencia y fallbacks en `src/domain/`.
-- `supabase/functions/coach-attempt/` y `summarize-session/`.
-- Adaptadores live y fixtures demo.
-- Pruebas de contrato y salidas adversariales.
+- Contratos de procedencia, estados y errores en `src/domain/contracts/`.
+- Normalización, tokenización y comparación en `src/domain/text/`.
+- `src/features/speech-recognition/` para la máquina de estados y el aviso de privacidad.
+- `src/recognizers/browser/` para `SpeechRecognition` y `webkitSpeechRecognition`.
+- `src/recognizers/demo/` para fixtures deterministas que no reciben audio.
+- Entrada manual mínima integrada en la prueba de grabación existente.
+- Pruebas unitarias, de adaptadores y de integración asociadas.
 
 **Aceptación**
 
-- GPT recibe sólo ejercicio, transcripción opcional, métricas y candidatos; nunca audio.
-- Structured Outputs usa `text.format` con esquema estricto.
-- ID desconocido, evidencia inexistente, campos extra, números inventados y lenguaje clínico invalidan toda la respuesta.
-- Timeout, rechazo o error aplican fallback sin bloquear el siguiente ejercicio.
-- El resumen sólo referencia intentos y claves existentes.
+- Antes de iniciar reconocimiento, la UI declara que el `Blob` permanece en memoria, Rimay no lo envía ni lo almacena y el navegador puede usar un servicio remoto propio.
+- El usuario puede elegir entrada manual desde el inicio o después de cualquier error.
+- El adaptador detecta constructor estándar, prefijado y soporte ausente.
+- El idioma usa un tag español, los resultados provisionales y finales se distinguen y `MediaRecorder` inicia en paralelo desde la misma acción.
+- `BrowserSpeechRecognizer` no recibe el `Blob`, no implementa `fetch` y no promete funcionamiento local u offline.
+- Permiso, captura, red, silencio, cancelación, idioma no compatible, servicio bloqueado y error desconocido tienen códigos y recuperación verificables.
+- `DemoSpeechRecognizer` produce la misma secuencia por fixture, no usa red, no inspecciona audio y muestra que el texto es predefinido.
+- La edición de un resultado automático cambia su procedencia a `manual`.
+- `text-metrics-v1` implementa normalización, tokens, similitud, coincidencias, omisiones, adiciones, conteo y WPM con desempates estables.
+- Las métricas indican fuente y no se presentan como evaluación clínica.
+- No se implementan todavía coaching, adaptación, sesión persistida, panel profesional, OpenAI, Supabase o despliegue.
 
-**Verificación**
+**Verificación automatizada**
 
 ```text
+npm run lint
 npm run typecheck
-npm test -- coach
-npm test -- summary
+npm test -- speech-recognition
+npm test -- text
 npm test
 npm run build
 ```
 
-Ejecutar casos controlados de esquema válido e inválido contra handlers locales; revisar que logs y errores no contengan prompts o respuestas.
+**Verificación manual**
+
+- Chrome y Edge: aviso antes del reconocimiento, elección manual y reconocimiento cuando exista soporte.
+- Secuencia provisional/final visible, grabación y reconocimiento paralelos, detener y cancelar.
+- Permiso rechazado, silencio y red desactivada con recuperación manual.
+- Demo ejecutada sin red después de cargar la app y rotulada como fixture.
+- Network confirma que la aplicación no envía el `Blob`, texto o métricas.
+- Storage confirma que este incremento no persiste audio ni resultados temporales.
+
+**Condición de parada**
+
+Al cumplir la aceptación, registrar evidencia en `build-notes.md` y detenerse. No iniciar el incremento 4 sin autorización.
+
+## Incremento 4 — Motor determinista de retroalimentación y adaptación
+
+**Objetivo**
+
+Implementar `coach-rules-v1` como función pura con plantillas curadas, razones verificables y selección limitada al catálogo permitido.
+
+**Archivos previstos**
+
+- Contratos y configuración de versión en `src/domain/coaching/`.
+- Catálogo versionado de plantillas no clínicas.
+- Política de candidatos en `src/domain/exercises/`.
+- Pruebas de reglas, umbrales, órdenes y contenido editorial.
+
+**Aceptación**
+
+- Entradas: calidad de audio, similitud, pausas, duración, proporción de silencio, dificultad e intentos.
+- La misma entrada produce el mismo `CoachDecision` completo.
+- Cada salida declara `rulesVersion`, `ruleId`, `templateId`, acción, explicación y evidencia.
+- Mensajes provienen sólo de plantillas curadas y no contienen afirmaciones diagnósticas.
+- Sólo se seleccionan IDs de `allowedExercises`; lista vacía produce error de configuración.
+- Repetición manual y avance requieren acción del usuario.
+- No existe GPT, red, aleatoriedad no controlada o fallback remoto.
+
+**Verificación**
+
+```text
+npm run lint
+npm run typecheck
+npm test -- coaching
+npm test -- adaptation
+npm test
+npm run build
+```
+
+Ejecutar fixtures de cada rama, límites exactos y catálogo adversarial; repetir entradas para comparar igualdad profunda.
 
 ## Incremento 5 — Recorrido vertical de un intento
 
 **Objetivo**
 
-Unir instrucción, grabación, reproducción, métricas, transcripción, feedback y selección validada para un ejercicio de palabra, con modos demo y live explícitos.
+Unir instrucción, elección de privacidad, grabación, reconocimiento o entrada manual, reproducción, métricas, feedback y selección determinista para un ejercicio de palabra.
 
 **Archivos previstos**
 
 - Máquina de estados en `src/features/practice/`.
-- Composición de proveedores en `src/providers/`.
+- Composición de captura, reconocedores y motor local.
 - Componentes mínimos del flujo paciente.
 - Pruebas de integración con Testing Library.
 
 **Aceptación**
 
-- Demo completa el intento sin `fetch` y live usa las tres fronteras previstas según corresponda.
-- El modo activo permanece visible y no hay fallback silencioso.
-- El usuario controla reproducción, regrabación, análisis y avance.
-- Un error recuperable conserva los datos temporales necesarios.
-- Sólo una salida totalmente validada se renderiza y aplica.
+- El recorrido demo no usa `fetch` y muestra el fixture como predefinido.
+- El recorrido browser conserva procedencia y la ruta manual siempre está disponible.
+- El usuario controla reproducción, regrabación, análisis, repetición y avance.
+- Un error recuperable conserva sólo los datos temporales necesarios.
+- La decisión renderizada coincide con `coach-rules-v1` y usa un ejercicio permitido.
+- El `Blob` se libera al reemplazar, descartar o desmontar.
 
 **Verificación**
 
 ```text
+npm run lint
 npm run typecheck
 npm test -- practice
 npm test
 npm run build
 ```
 
-Recorrer demo sin red y live con audio ficticio; inspeccionar red, consola y almacenamiento.
+Recorrer demo sin red, browser y manual; inspeccionar red, consola y almacenamiento.
 
 ## Incremento 6 — Tres ejercicios y voz accesible
 
 **Objetivo**
 
-Incorporar el catálogo ficticio, los tres tipos obligatorios, progreso de sesión e instrucciones mediante `SpeechSynthesis`.
+Incorporar el catálogo ficticio, los tres tipos obligatorios, progreso inicial e instrucciones mediante `SpeechSynthesis`.
 
 **Archivos previstos**
 
 - Catálogo en `src/domain/exercises/`.
 - Componentes de instrucción y lectura guiada.
-- Adaptador `SpeechOutput` del navegador y demo de error.
+- Adaptador `SpeechOutput` del navegador.
 - Pruebas de catálogo, cobertura inicial y controles de voz.
 
 **Aceptación**
 
 - Los intentos 1, 2 y 3 son palabra, frase y lectura guiada respectivamente.
-- Cada ejercicio tiene contenido ficticio, dificultad válida y duración máxima.
-- Toda voz tiene texto visible y botones escuchar/detener/repetir.
+- Cada ejercicio tiene contenido ficticio, dificultad válida y duración esperada.
+- Toda voz tiene texto visible y botones escuchar, detener y repetir.
 - Falta de voz española no bloquea el flujo.
-- No hay reproducción o avance automático.
+- No hay reproducción, reconocimiento o avance automático.
 
 **Verificación**
 
 ```text
+npm run lint
 npm run typecheck
 npm test -- exercises
 npm test -- speech
@@ -243,169 +276,184 @@ npm run build
 
 Recorrido manual con voz disponible y simulada como ausente; verificar teclado y anuncios.
 
-## Incremento 7 — Adaptación controlada
+## Incremento 7 — Sesión de cinco intentos y adaptación completa
 
 **Objetivo**
 
-Implementar generación determinista de candidatos, dificultad acotada, recaptura única y aplicación segura de la sugerencia.
+Integrar cobertura, dificultad acotada, repetición manual y finalización determinista de una sesión ficticia.
 
 **Archivos previstos**
 
-- Política pura en `src/domain/exercises/adaptation`.
-- Integración con la máquina de sesión.
-- Fixtures para límites y cinco intentos.
+- Máquina de sesión y política de cobertura.
+- Integración de `coach-rules-v1` con el catálogo.
+- Fixtures de cinco intentos y límites.
 - Pruebas unitarias y de integración.
 
 **Aceptación**
 
-- La sesión termina con cinco intentos válidos y no queda atrapada en repeticiones.
-- Calidad insuficiente permite una sola recaptura no contabilizada por posición.
-- La similitud ajusta sólo dificultad 1–3 según `spec.md`.
-- WPM, RMS, pausas y clipping no cambian dificultad.
-- GPT nunca aplica un ID fuera de los candidatos; fallback usa el primero del orden estable.
+- La sesión termina con cinco intentos válidos aceptados.
+- Los tres primeros cubren los tipos obligatorios.
+- La similitud ajusta dificultad sólo dentro de 1–3.
+- Calidad, pausas, duración y silencio seleccionan plantillas según el orden versionado.
+- La acción del usuario controla repetición y avance; no existen bucles automáticos.
+- Ningún ejercicio fuera de la lista permitida se aplica.
 
 **Verificación**
 
 ```text
+npm run lint
 npm run typecheck
+npm test -- session
 npm test -- adaptation
 npm test -- practice
 npm test
 npm run build
 ```
 
-Ejecutar escenarios de baja, media, alta y nula similitud, además de sugerencia GPT inválida.
+Ejecutar escenarios de baja, media, alta y nula similitud, calidad deficiente, pausas, duración, silencio y quinto intento.
 
-## Incremento 8 — Sesiones ficticias, almacenamiento local y roles
+## Incremento 8 — Persistencia local, roles y eliminación total
 
 **Objetivo**
 
-Persistir sólo datos derivados, recuperar sesiones en el mismo navegador y habilitar el selector local paciente/profesional.
+Persistir sólo sesiones ficticias y datos derivados, recuperar sesiones en el mismo navegador, habilitar roles y eliminar completamente los datos locales de Rimay.
 
 **Archivos previstos**
 
 - `LocalSessionRepository` y validación de `rimay.demo.v1`.
-- Fixtures de sesiones en `src/providers/demo/`.
+- Fixtures de sesiones locales.
 - `RoleSwitcher`, inicio/continuación/descarte y lista profesional mínima.
-- Pruebas de serialización, cuota y corrupción.
+- `DeleteLocalData` y registro explícito de claves propias.
+- Pruebas de serialización, cuota, corrupción y eliminación.
 
 **Aceptación**
 
-- Recargar conserva sesiones y cambiar de rol no las borra.
-- Almacenamiento contiene máximo 20 sesiones y ningún audio, blob, URL o PCM.
-- Documento inválido no rompe la app; se informa y se inicia en memoria o con fixtures seguros.
-- `QuotaExceededError` conserva la sesión actual en memoria.
-- La UI explica que el selector no es autenticación.
+- Recargar conserva sesiones ficticias y cambiar de rol no las borra.
+- Almacenamiento contiene máximo 20 sesiones y ningún audio, `Blob`, URL, PCM, stream o texto provisional.
+- Documento inválido no rompe la app; `QuotaExceededError` conserva la sesión actual en memoria.
+- Eliminar todo detiene recursos activos, quita todas las claves de Rimay, limpia memoria y verifica ausencia antes de confirmar.
+- La implementación no usa `localStorage.clear()`.
+- La UI explica que el selector no es autenticación y que el navegador puede conservar datos propios fuera del control de Rimay.
 
 **Verificación**
 
 ```text
+npm run lint
 npm run typecheck
 npm test -- repository
 npm test -- session
+npm test -- delete-local-data
 npm test
 npm run build
 ```
 
-Inspeccionar manualmente `localStorage`, recargar, cambiar de rol y descartar una sola sesión.
+Inspeccionar `localStorage`, recargar, cambiar de rol, descartar una sesión y eliminar todas las sesiones.
 
-## Incremento 9 — Revisión y resumen profesional
+## Incremento 9 — Revisión y resumen profesional determinista
 
 **Objetivo**
 
-Completar la vista profesional con intentos, métricas, banderas, evidencia y resumen estructurado.
+Completar la vista profesional con intentos, procedencia, métricas, decisiones, evidencia y `summary-rules-v1`.
 
 **Archivos previstos**
 
 - `src/features/professional-review/`.
-- Integración de `ProfessionalSummary` y su fallback.
+- Motor puro de resumen y plantillas curadas.
 - Componentes de métricas, evidencia y limitaciones.
-- Pruebas de estados completos, pendientes y fallidos.
+- Pruebas de estados completos y vacíos.
 
 **Aceptación**
 
 - La sesión recién terminada aparece primero.
-- Cada intento muestra prompt, transcripción, métricas, versión, flags, feedback y “Audio no conservado”.
-- Métricas, IA y limitaciones están en secciones diferentes.
+- Cada intento muestra prompt, texto/procedencia, versiones, métricas, flags, decisión, explicación y “Audio no conservado”.
+- Métricas, decisiones del motor, limitaciones e interpretación profesional están separadas.
 - Cada observación sólo enlaza evidencia existente.
-- Sin resumen live, los datos deterministas siguen disponibles y existe fallback o reintento explícito.
+- El resumen es idéntico para el mismo `SessionBundle` y no contiene lenguaje clínico.
 
 **Verificación**
 
 ```text
+npm run lint
 npm run typecheck
+npm test -- summary
 npm test -- professional-review
 npm test
 npm run build
 ```
 
-Recorrer sesión completa, cambiar a profesional y revisar estados vacío, pendiente, exitoso y fallido.
+Recorrer una sesión completa, cambiar a profesional y revisar estados vacío y finalizado.
 
-## Incremento 10 — Accesibilidad, errores y privacidad
+## Incremento 10 — Accesibilidad, errores, privacidad y auditoría de costo
 
 **Objetivo**
 
-Falsificar los flujos con errores y completar el endurecimiento WCAG 2.2 AA, privacidad y lenguaje no clínico.
+Falsificar los flujos, completar el endurecimiento WCAG 2.2 AA y demostrar ausencia de servicios cobrables.
 
 **Archivos previstos**
 
 - Componentes compartidos de estado y error.
 - Matriz de copy en español y filtro editorial.
-- Pruebas de teclado, foco, anuncios, límites y contenido prohibido.
-- Ajustes de estilos accesibles sin nuevas funciones de producto.
+- Pruebas de teclado, foco, anuncios, límites, procedencia y contenido prohibido.
+- Documentación de auditoría de privacidad y costo.
 
 **Aceptación**
 
 - Todos los errores del PRD tienen mensaje, acción y foco predecible.
 - La aplicación funciona por teclado, con zoom 200 %, reflow y contraste AA.
 - Controles principales miden al menos 44 px y el foco no queda oculto.
-- No hay contenido dependiente sólo de color o audio.
-- Consola, red y almacenamiento no exponen claves, audio, transcripciones o payloads completos.
-- Búsquedas de términos clínicos prohibidos no encuentran copy visible no justificado.
+- No hay contenido dependiente sólo de color, audio o reconocimiento.
+- Consola, red, almacenamiento y build no exponen claves, audio, textos o documentos completos.
+- Búsquedas no encuentran SDKs/endpoints de OpenAI, Supabase, APIs comerciales ni recursos Vercel facturables.
+- Demo funciona sin red después de cargar assets.
 
 **Verificación**
 
 ```text
+npm run lint
 npm run typecheck
 npm test
 npm run build
 ```
 
-Completar matriz manual de Chrome/Edge, teclado, lector de pantalla, zoom, red lenta/sin red, micrófono rechazado/ausente e inspección de privacidad.
+Completar matriz manual de Chrome/Edge, teclado, lector de pantalla, zoom, micrófono, Web Speech, red, Storage y eliminación local.
 
-## Incremento 11 — Documentación final, despliegue y ensayo
+## Incremento 11 — Documentación final, Vercel Hobby y ensayo
 
 **Objetivo**
 
-Cerrar la entrega reproducible: README, pruebas completas, build Vercel, funciones Supabase y guion de demostración.
+Cerrar la entrega reproducible con README, build estático, despliegue Vercel Hobby, guion y declaraciones públicas exactas.
 
 **Archivos previstos**
 
-- `README.md` y actualización de documentación de arquitectura/notas.
-- Configuración final de Vercel y Supabase permitida por las plataformas.
+- `README.md` y actualización final de arquitectura/notas.
+- Configuración mínima de Vercel sólo si es necesaria para la SPA.
 - Fixtures y pruebas finales necesarias para criterios de aceptación.
-- Guion de demo y checklist de reversión de live.
+- Guion de demo, auditoría de costo y texto de Devpost.
 
 **Aceptación**
 
-- Una persona nueva puede instalar y ejecutar demo siguiendo el README sin secretos.
-- Live documenta variables, secretos, CORS, modelos y límites sin exponer valores.
-- Preview Vercel completa demo y, en entorno controlado, live con datos ficticios.
-- El guion principal dura aproximadamente 90 segundos y tiene una ruta de recuperación.
+- Una persona nueva puede instalar, probar y ejecutar Rimay sin secretos, cuentas de API o tarjeta.
+- El build desplegado contiene sólo archivos estáticos y usa el subdominio gratuito de Vercel.
+- El proyecto permanece en Hobby sin prueba Pro, Functions, add-ons, Storage, analytics pagos o dominio comprado.
+- Preview y producción completan demo sin red después de cargar assets; browser/manual funcionan con su aviso.
+- El guion principal dura aproximadamente 90 segundos y tiene ruta manual de recuperación.
+- README enumera límites de `SpeechRecognition`, privacidad, eliminación local, límites médicos y límites de Hobby.
+- Devpost dice que Rimay fue construido con Codex y asistencia de GPT-5.6, y que el motor runtime es local, determinista y gratuito.
+- Devpost no atribuye feedback, resumen o transcripción runtime a GPT-5.6 u OpenAI.
 - Todas las historias y criterios del PRD están trazados a pruebas o verificación manual.
-- No hay migraciones, Auth, Storage, audio persistido ni datos reales.
 
 **Verificación**
 
 ```text
 npm install
+npm run lint
 npm run typecheck
 npm test
 npm run build
 ```
 
-Ejecutar también el build desplegado, las tres Edge Functions, el guion principal, la matriz de errores prioritaria y una revisión final del diff y de secretos.
+Ejecutar el build local y desplegado, el guion, la matriz de errores, eliminación local, inspección de Network/Storage y revisión del panel Hobby. Si una acción solicita tarjeta o plan pago, detenerla y registrar que queda fuera de alcance.
 
 ## Condición de cierre global
 
-La construcción termina cuando el incremento 11 cumple su aceptación y el responsable aprueba la demostración. Cualquier uso con personas o datos reales, persistencia remota, autenticación, audio histórico o afirmación clínica requiere un proyecto posterior con alcance, seguridad y revisión profesional propios.
+La construcción termina cuando el incremento 11 cumple su aceptación y el responsable aprueba la demostración. Cualquier uso con personas o datos reales, persistencia remota, autenticación, audio histórico, servicio cobrable o afirmación clínica requiere un proyecto posterior con alcance, seguridad, presupuesto y revisión profesional propios.
