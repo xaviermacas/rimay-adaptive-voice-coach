@@ -120,13 +120,15 @@ Antes del incremento 3 se reemplazó el plan anterior de Supabase/OpenAI por Web
 
 **Estado: PENDIENTE — REQUIERE AUTORIZACIÓN EXPRESA**
 
+La resolución documental de contratos y fórmulas de `text-metrics-v1` está completada. Esta resolución no inicia ni autoriza la implementación del incremento.
+
 **Objetivo**
 
 Resolver el principal riesgo restante sin servicios contratados: ejecutar `BrowserSpeechRecognizer` en paralelo con `MediaRecorder`, proporcionar `DemoSpeechRecognizer` y entrada manual, y producir `text-metrics-v1` local y determinista.
 
 **Archivos previstos**
 
-- Contratos de procedencia, estados y errores en `src/domain/contracts/`.
+- Contratos de procedencia, estados, errores, `SpeechTextResult` y `TextMetrics` en `src/domain/contracts/`.
 - Normalización, tokenización y comparación en `src/domain/text/`.
 - `src/features/speech-recognition/` para la máquina de estados y el aviso de privacidad.
 - `src/recognizers/browser/` para `SpeechRecognition` y `webkitSpeechRecognition`.
@@ -144,7 +146,12 @@ Resolver el principal riesgo restante sin servicios contratados: ejecutar `Brows
 - Permiso, captura, red, silencio, cancelación, idioma no compatible, servicio bloqueado y error desconocido tienen códigos y recuperación verificables.
 - `DemoSpeechRecognizer` produce la misma secuencia por fixture, no usa red, no inspecciona audio y muestra que el texto es predefinido.
 - La edición de un resultado automático cambia su procedencia a `manual`.
-- `text-metrics-v1` implementa normalización, tokens, similitud, coincidencias, omisiones, adiciones, conteo y WPM con desempates estables.
+- `SpeechTextResult` conserva `originalText`, `normalizedText` y `comparisonText`, además de procedencia, idioma solicitado, finalidad, advertencias y fecha ISO 8601.
+- `normalizedText` usa NFC y conserva tildes, diéresis y `ñ`; `comparisonText` elimina tildes y diéresis sin convertir `ñ` en `n`.
+- `text-metrics-v1` alinea palabras por programación dinámica con `match`, `substitution`, `omission` y `addition`; los empates siguen ese mismo orden.
+- `wordErrorRate` divide sustituciones, omisiones y adiciones por las palabras objetivo; `textSimilarity = max(0, 1 - wordErrorRate)`.
+- Un objetivo vacío produce el error tipado `empty_target` y no fabrica métricas.
+- WPM usa `transcribedWordCount / (totalDurationMs / 60_000)` únicamente con una grabación real y duración válida. Entrada manual sin captura y demo sin audio real producen `null`.
 - Las métricas indican fuente y no se presentan como evaluación clínica.
 - No se implementan todavía coaching, adaptación, sesión persistida, panel profesional, OpenAI, Supabase o despliegue.
 

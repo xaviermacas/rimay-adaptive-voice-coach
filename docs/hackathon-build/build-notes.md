@@ -17,7 +17,7 @@
 - Compatibilidad de herramientas: no se adoptó TypeScript `7.0.2` porque `typescript-eslint 8.64.0` declara TypeScript `>=4.8.4 <6.1.0`.
 - UI entregada: shell mínima en español neutro, modo `demo` visible y predeterminado, explicación previa al permiso y descargo educativo no clínico.
 - Grabación entregada: `MediaRecorder`, negociación MIME, una captura simultánea, límites de 60 segundos/10 MB, errores accesibles, reproducción mediante URL temporal, audio sólo en memoria y limpieza de pistas/URL.
-- Contratos entregados: tipos iniciales de dominio y las interfaces `Transcriber`, `Coach`, `SessionRepository` y `SpeechOutput`; no existen implementaciones live.
+- Contratos entregados: tipos iniciales de dominio e interfaces preliminares para proveedores, coaching, repositorio y salida de voz; no existen implementaciones live. Los nombres orientados a un proveedor de transcripción quedaron retirados posteriormente del contrato canónico.
 - Instalación: 251 paquetes añadidos, 252 auditados y 0 vulnerabilidades reportadas por npm.
 - Verificación automatizada final: `npm run lint` sin errores ni advertencias; `npm run typecheck` con código 0; `npm test` con 3 archivos y 16 pruebas aprobadas; `npm run build` con 20 módulos transformados.
 - Auditoría de alcance: sólo existe `.env.example`; el código y la configuración no contienen secretos, Supabase, OpenAI/GPT, `fetch`, persistencia web, Web Audio, transcripción o métricas.
@@ -98,7 +98,7 @@ El responsable confirmó los siguientes resultados sin observaciones pendientes:
 9. `estimatedSpeechDurationMs` es la suma redondeada de las muestras de los segmentos finales. `silenceDurationMs` usa las muestras restantes y `silenceRatio = silenceSampleCount / totalSampleCount`, redondeado a seis decimales.
 10. Una pausa es un intervalo interno entre segmentos finales de al menos 300 ms. `pauseCount` cuenta esos intervalos, `averagePauseDurationMs` redondea su media y `maximumPauseDurationMs` redondea el máximo; ambos son `null` cuando no hay pausas.
 11. Una muestra cuenta como clipped si `abs(sample) >= 0.99`. `clippedSampleRatio = clippedSampleCount / totalSampleCount`, redondeado a seis decimales, y `possibleClipping` se activa cuando el ratio es mayor o igual a `0.001`.
-12. `wordCount`, `wordsPerMinute` y `promptSimilarity` permanecen en `null` porque este incremento no implementa transcripción ni métricas textuales.
+12. Los campos textuales heredados de `audio-metrics-v1` permanecen en `null` porque este incremento no implementa reconocimiento ni métricas textuales. `text-metrics-v1` tendrá su propio contrato canónico.
 
 ### Parámetros experimentales
 
@@ -213,6 +213,19 @@ La diferencia pequeña entre duración capturada y duración decodificada se con
 - Comandos de producto: no se ejecutaron `npm run lint`, `npm run typecheck`, `npm test` ni `npm run build` porque esta pausa no modificó código y el flujo documental ordena sustituirlos por comprobaciones de cobertura y consistencia.
 - Git: no se creó commit y el incremento 3 permanece sin iniciar.
 
+## Resolución canónica de texto previa al incremento 3
+
+- Fecha: 2026-07-18.
+- Alcance: corrección exclusivamente documental de `spec.md`, `checklist.md` y `build-notes.md`; no se escribió código, no se modificaron dependencias y no se inició el incremento 3.
+- Contrato: `SpeechTextResult` es el resultado multifuente canónico para `browser`, `manual` y `demo`. Conserva `originalText`, `normalizedText`, `comparisonText`, `source`, `languageRequested`, `isFinal`, `warnings` y `createdAt`.
+- Estados y errores: soporte ausente, cancelación y fallos permanecen fuera del resultado textual y se modelan mediante estado y código tipados. Sólo un resultado final no vacío puede convertirse en texto estable.
+- Contratos retirados: los nombres heredados orientados a un proveedor de transcripción dejan de formar parte de la arquitectura canónica.
+- Normalización: `originalText` no cambia; `normalizedText` usa NFC, minúsculas, puntuación reemplazada por espacios y espacios colapsados, conservando tildes, diéresis y `ñ`; `comparisonText` elimina tildes y diéresis únicamente para comparar y protege `ñ` para mantenerla distinta de `n`.
+- Alineamiento: `text-metrics-v1` usa programación dinámica por palabras con `match`, `substitution`, `omission` y `addition`, todas de costo uno salvo la coincidencia de costo cero. El backtracking desempata en ese mismo orden.
+- Fórmulas: `wordErrorCount = substitutions + omissions + additions`, `wordErrorRate = wordErrorCount / targetWordCount` y `textSimilarity = max(0, 1 - wordErrorRate)`. WER puede superar `1`; la similitud queda entre `0` y `1`; un objetivo vacío produce `empty_target` sin métricas fabricadas.
+- WPM: `wordsPerMinute = transcribedWordCount / (totalDurationMs / 60_000)`. Requiere grabación real y duración positiva; demo sin audio real y entrada manual sin captura producen `null`. El tiempo estimado de voz no interviene en esta fórmula.
+- Git: los cambios permanecen sin commit. El incremento 3 continúa pendiente de autorización expresa.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |
@@ -243,7 +256,7 @@ Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan s
 - Captura máxima: 60 segundos o 10 MB, lo que ocurra primero.
 - Orden de MIME: `audio/webm;codecs=opus`, `audio/webm`, `audio/mp4` y formato predeterminado sólo si Web Audio puede decodificarlo.
 - Audio: `audio-metrics-v1` conserva las fórmulas verificadas en el incremento 2.
-- Texto: `text-metrics-v1` usa normalización española, Levenshtein por tokens y alineación LCS estable.
+- Texto: `text-metrics-v1` conserva original, normalizado NFC y comparación sin tildes ni diéresis pero con `ñ` distinta de `n`; usa alineamiento dinámico por palabras con operaciones y desempate estables.
 - Reconocimiento browser: tag inicial `es-EC`, resultados provisionales y finales, error mapping y alternativa manual.
 - Reconocimiento demo: fixtures por IDs conocidos, sin `fetch` y sin acceso al audio.
 - Coaching: `coach-rules-v1`; resumen: `summary-rules-v1`.

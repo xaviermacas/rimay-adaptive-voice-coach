@@ -165,7 +165,15 @@ interface RecordingMetadata {
 
 ```ts
 type SpeechTextSource = 'browser' | 'demo' | 'manual'
-type SpeechTextStatus = 'available' | 'unavailable' | 'failed' | 'cancelled'
+type SpeechRecognitionStatus =
+  | 'idle'
+  | 'requesting'
+  | 'listening'
+  | 'processing'
+  | 'completed'
+  | 'unsupported'
+  | 'cancelled'
+  | 'error'
 
 type SpeechRecognitionErrorCode =
   | 'unsupported'
@@ -179,23 +187,28 @@ type SpeechRecognitionErrorCode =
   | 'unknown'
 
 interface SpeechTextResult {
-  status: SpeechTextStatus
+  originalText: string
+  normalizedText: string
+  comparisonText: string
   source: SpeechTextSource
-  text: string | null
-  languageTag: string | null
-  errorCode: SpeechRecognitionErrorCode | null
-  disclosureVersion: 'speech-privacy-v1'
+  languageRequested: string | null
+  isFinal: boolean
+  warnings: readonly string[]
+  createdAt: string
 }
 ```
 
 Reglas:
 
-- `available` exige texto no vacío y `errorCode: null`;
-- `unavailable`, `failed` o `cancelled` exigen `text: null` como resultado estable;
-- un texto provisional sólo pertenece al estado transitorio de UI, no a `SpeechTextResult` persistible;
+- `originalText` conserva exactamente el texto recibido; las otras dos representaciones se derivan con las reglas de la sección 9.2;
+- `languageRequested` contiene el tag solicitado al reconocedor, inicialmente `es-EC`, y es `null` cuando la entrada manual no solicitó un idioma al navegador;
+- sólo un resultado con `isFinal: true` y texto no vacío puede convertirse en texto estable de un intento;
+- un resultado con `isFinal: false` es transitorio, se muestra como provisional y nunca se persiste;
+- soporte ausente, fallos y cancelación se representan mediante `SpeechRecognitionStatus` y `SpeechRecognitionErrorCode`; no se fabrica un `SpeechTextResult` vacío;
 - `source: 'demo'` exige el aviso de fixture y no puede atribuirse al audio;
 - `source: 'manual'` se muestra como declaración del usuario, no como transcripción automática;
-- editar un texto reconocido crea un nuevo resultado `manual`; no se conserva `browser` como procedencia.
+- editar un texto reconocido crea un nuevo resultado `manual`; no se conserva `browser` como procedencia;
+- `createdAt` usa ISO 8601 y `warnings` no puede contener contenido reconocido ni detalles crudos del navegador.
 
 ### 6.2 Métricas de audio
 
@@ -233,8 +246,8 @@ El identificador histórico `transcription_missing` se conserva para no cambiar 
 
 ```ts
 interface WordMatch {
-  promptIndex: number
-  textIndex: number
+  targetIndex: number
+  transcribedIndex: number
   token: string
 }
 
@@ -243,23 +256,38 @@ interface IndexedToken {
   token: string
 }
 
+interface WordSubstitution {
+  targetIndex: number
+  transcribedIndex: number
+  targetToken: string
+  transcribedToken: string
+}
+
 interface TextMetrics {
   algorithmVersion: 'text-metrics-v1'
   source: SpeechTextSource
-  normalizedPrompt: string
-  normalizedText: string
-  promptTokens: readonly string[]
-  textTokens: readonly string[]
-  wordCount: number
-  wordsPerMinute: number | null
-  promptSimilarity: number | null
+  targetText: string
+  transcribedText: string
+  targetWordCount: number
+  transcribedWordCount: number
+  matchedWordCount: number
   matchedWords: readonly WordMatch[]
   omittedWords: readonly IndexedToken[]
   additionalWords: readonly IndexedToken[]
+  substitutedWords: readonly WordSubstitution[]
+  wordErrorCount: number
+  wordErrorRate: number
+  textSimilarity: number
+  wordsPerMinute: number | null
+  warnings: readonly string[]
 }
+
+type TextMetricsResult =
+  | { status: 'success'; metrics: TextMetrics }
+  | { status: 'error'; error: { code: 'empty_target'; message: string } }
 ```
 
-`TextMetrics` describe una comparación técnica. Para origen `manual`, la UI debe decir que los cálculos se basan en texto escrito por el usuario; para origen `demo`, que se basan en un fixture. Ninguna fuente convierte los valores en evaluación clínica.
+`TextMetrics` describe una comparación técnica. `targetText` y `transcribedText` conservan las representaciones normalizadas; el alineamiento compara los tokens derivados de `comparisonText`, pero las listas visibles conservan tildes, diéresis y `ñ`. Para origen `manual`, la UI debe decir que los cálculos se basan en texto escrito por el usuario; para origen `demo`, que se basan en un fixture. Ninguna fuente convierte los valores en evaluación clínica.
 
 ### 6.4 Motor de retroalimentación y adaptación
 
@@ -480,39 +508,46 @@ Los umbrales son heurísticas técnicas de captura. No se pueden presentar como 
 
 ### 9.2 Normalización española de `text-metrics-v1`
 
-1. Convertir a minúsculas con locale español.
-2. Aplicar Unicode NFKD.
-3. Retirar marcas combinantes y puntuación.
-4. Conservar secuencias de letras y números Unicode como tokens.
-5. Colapsar espacios.
+Cada texto conserva tres representaciones:
 
-La normalización no corrige palabras, no expande abreviaturas y no usa diccionarios o servicios externos.
+1. `originalText` es el valor recibido sin modificaciones.
+2. `normalizedText` aplica Unicode NFC, convierte a minúsculas con locale español, reemplaza la puntuación por espacios, colapsa el espacio en blanco y recorta los extremos. Conserva vocales acentuadas, diéresis y `ñ`.
+3. `comparisonText` parte de `normalizedText`, conserva cada `ñ` como una letra distinta y elimina tildes o diéresis de los demás caracteres únicamente para comparar.
 
-### 9.3 Conteo, WPM y similitud
+Para construir `comparisonText`, cada `ñ` se protege antes de descomponer los demás caracteres y retirar sus marcas diacríticas. No se permite retirar marcas combinantes de forma indiscriminada, porque eso transformaría `ñ` en `n`. El resultado vuelve a una forma Unicode compuesta y conserva los espacios ya normalizados.
 
-- `wordCount` es el número de tokens del texto utilizable.
-- `wordsPerMinute = wordCount / (totalDurationMs / 60_000)` cuando existe al menos un token y la duración es positiva; se redondea a una cifra decimal.
-- `promptSimilarity` usa distancia Levenshtein sobre arrays de tokens:
+La puntuación se reemplaza por espacios para no unir palabras adyacentes. La normalización no corrige palabras, no expande abreviaturas y no usa diccionarios o servicios externos. Una cadena vacía continúa vacía y se valida antes de calcular métricas.
+
+### 9.3 Alineamiento, WER y similitud
+
+- El objetivo y el texto utilizable se tokenizan por los espacios de sus respectivos `comparisonText`.
+- Una matriz de programación dinámica alinea palabras con cuatro operaciones: `match` con costo `0`, y `substitution`, `omission` o `addition` con costo `1`.
+- Una sustitución es una única operación entre un token objetivo y un token del texto; no se convierte en una omisión más una adición.
+- Durante el backtracking, los empates se resuelven siempre en este orden: `match`, `substitution`, `omission`, `addition`.
+- Coincidencias, sustituciones, omisiones y adiciones se emiten en orden ascendente, con índices estables. Los tokens visibles proceden de `normalizedText` para conservar tildes, diéresis y `ñ`.
 
 ```text
-1 - distance(promptTokens, textTokens) / max(promptTokens.length, textTokens.length)
+wordErrorCount = substitutions + omissions + additions
+wordErrorRate = wordErrorCount / targetWordCount
+textSimilarity = max(0, 1 - wordErrorRate)
 ```
 
-- El resultado se limita a `[0, 1]` y se redondea a cuatro decimales.
-- Si falta texto, el prompt queda vacío tras normalizar o la duración no permite WPM, el campo correspondiente es `null`.
-- WPM con origen manual o demo debe nombrar esa fuente y no afirmar que se contaron automáticamente las palabras pronunciadas.
+`wordErrorRate` puede ser mayor que `1` cuando existen muchas palabras adicionales. `textSimilarity` queda limitado entre `0` y `1`; ambos valores se redondean a cuatro decimales después de calcular con precisión completa. Si el objetivo queda vacío tras normalizar, se devuelve `TextMetricsResult` con error tipado `empty_target` y no se fabrica un objeto de métricas.
 
-### 9.4 Coincidencias, omisiones y adiciones
+La matriz, los costos y la regla de desempate forman parte de `text-metrics-v1`; cambiarlos exige una versión nueva y fixtures nuevos.
 
-- Usar una subsecuencia común más larga sobre tokens exactos y normalizados para alinear palabras conservando el orden.
-- Un token alineado produce `WordMatch` con ambos índices.
-- Un token del prompt sin alinear se marca como omitido.
-- Un token del texto sin alinear se marca como adicional.
-- Una sustitución aparece como una omisión y una adición; no se infiere fonética.
-- Ante empates de longitud, el backtracking usa orden fijo: coincidencia diagonal, avance en el prompt y después avance en el texto.
-- Resultados e índices se emiten en orden ascendente.
+### 9.4 Palabras por minuto
 
-La estrategia y el desempate son parte de `text-metrics-v1`; cambiarlos exige una nueva versión y fixtures nuevos.
+```text
+wordsPerMinute = transcribedWordCount / (totalDurationMs / 60_000)
+```
+
+- `totalDurationMs` debe proceder de una grabación real, ser finito y mayor que cero. Incluye pausas y representa la velocidad global de la producción.
+- `wordsPerMinute` se redondea a una cifra decimal y es `null` si no existe grabación real o la duración es cero o inválida.
+- Un resultado demo sin audio real produce `null`.
+- Una entrada manual sin captura produce `null`; si está asociada a una captura real válida, puede producir WPM y conserva `source: 'manual'`.
+- `estimatedSpeechDurationMs` no se usa como denominador de WPM: medir sólo el tiempo estimado de voz correspondería a otra métrica similar a una tasa de articulación, fuera de este incremento.
+- La UI nombra siempre la procedencia y no afirma que las palabras manuales o demo fueron contadas automáticamente a partir de la voz.
 
 ## 10. Motor determinista de retroalimentación y adaptación
 
@@ -696,9 +731,9 @@ No se prevén carpetas `supabase/`, `api/`, `functions/` o adaptadores OpenAI en
 ### 15.1 Unitarias con Vitest
 
 - Métricas de audio existentes con PCM sintético.
-- Normalización española con acentos, mayúsculas, puntuación, números, espacios y Unicode.
-- Tokenización, conteo, WPM, Levenshtein y límites vacíos.
-- LCS con repeticiones, sustituciones, empates, omisiones y adiciones.
+- Las tres representaciones textuales con acentos, diéresis, `ñ`, mayúsculas, puntuación, números, espacios y Unicode.
+- Tokenización, conteos, WER, similitud, objetivo vacío y WPM basado en `totalDurationMs`.
+- Alineamiento por programación dinámica con coincidencias, sustituciones, omisiones, adiciones, repeticiones y el orden de desempate canónico.
 - Procedencia `browser`, `demo` y `manual` y sus invariantes.
 - Reglas de coaching para cada prioridad, umbral exacto y combinación de señales.
 - Orden estable de candidatos y rechazo de IDs no permitidos.
