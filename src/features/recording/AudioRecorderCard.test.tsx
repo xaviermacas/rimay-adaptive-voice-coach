@@ -1,8 +1,20 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  createAudioBufferLike,
+  createSegmentedSignal,
+} from '../../test/fixtures/audio/syntheticAudio';
+import type { AudioAnalysisResult } from '../../domain/audio';
 import { AudioRecorderCard } from './AudioRecorderCard';
 import { MICROPHONE_REQUEST_TIMEOUT_MS } from './recordingSupport';
 
@@ -59,6 +71,10 @@ const originalCreateObjectUrl = Object.getOwnPropertyDescriptor(
 const originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(
   URL,
   'revokeObjectURL',
+);
+const originalBlobArrayBuffer = Object.getOwnPropertyDescriptor(
+  Blob.prototype,
+  'arrayBuffer',
 );
 
 let currentTimeMs = 0;
@@ -132,6 +148,7 @@ describe('AudioRecorderCard', () => {
     restoreProperty(navigator, 'mediaDevices', originalMediaDevices);
     restoreProperty(URL, 'createObjectURL', originalCreateObjectUrl);
     restoreProperty(URL, 'revokeObjectURL', originalRevokeObjectUrl);
+    restoreProperty(Blob.prototype, 'arrayBuffer', originalBlobArrayBuffer);
   });
 
   it('solicita permiso solo al iniciar, graba, detiene y libera el micrófono', async () => {
@@ -341,7 +358,11 @@ describe('AudioRecorderCard', () => {
     });
     currentTimeMs = 900;
     await user.click(screen.getByRole('button', { name: 'Detener grabación' }));
-    await user.click(await screen.findByRole('button', { name: 'Descartar grabación' }));
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Descartar y grabar de nuevo',
+      }),
+    );
 
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:rimay-test');
     expect(
@@ -373,5 +394,150 @@ describe('AudioRecorderCard', () => {
     unmount();
 
     expect(stopTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it('integra Blob, decodificación Web Audio simulada y presentación de métricas', async () => {
+    const user = userEvent.setup();
+    const decodedAudio = createAudioBufferLike(
+      [
+        createSegmentedSignal(
+          [
+            { amplitude: 0.2, durationMs: 400 },
+            { amplitude: 0, durationMs: 400 },
+            { amplitude: 0.2, durationMs: 400 },
+            { amplitude: 0, durationMs: 400 },
+            { amplitude: 0.2, durationMs: 400 },
+          ],
+          1_000,
+        ),
+      ],
+      1_000,
+    );
+    const decodedAudioRequest = createDeferred<typeof decodedAudio>();
+    const decodeAudioData = vi
+      .fn()
+      .mockReturnValue(decodedAudioRequest.promise);
+    const close = vi.fn().mockResolvedValue(undefined);
+
+    class MockAudioContext {
+      decodeAudioData = decodeAudioData;
+      close = close;
+    }
+
+    Object.defineProperty(Blob.prototype, 'arrayBuffer', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(new ArrayBuffer(16)),
+    });
+    vi.stubGlobal('AudioContext', MockAudioContext);
+    render(<AudioRecorderCard />);
+
+    await user.click(screen.getByRole('button', { name: 'Iniciar prueba' }));
+    act(() => {
+      MockMediaRecorder.instances[0]?.emitData(
+        new Blob(['audio-ficticio'], { type: 'audio/webm' }),
+      );
+    });
+    currentTimeMs = 1_200;
+    await user.click(screen.getByRole('button', { name: 'Detener grabación' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Analizar grabación' }),
+    );
+
+    expect(screen.getByText('Procesando el audio localmente…')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Analizando grabación…' }),
+    ).toBeDisabled();
+
+    await act(async () => {
+      decodedAudioRequest.resolve(decodedAudio);
+      await decodedAudioRequest.promise;
+    });
+
+    const summary = await screen.findByRole('region', {
+      name: 'Resumen técnico de la captura',
+    });
+    expect(within(summary).getByText('2.0 s')).toBeInTheDocument();
+    expect(within(summary).getByText(/audio-metrics-v1/i)).toBeInTheDocument();
+    expect(
+      within(summary).getByText(
+        'Estas métricas son técnicas y experimentales. No representan una evaluación clínica.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Reproducir la grabación local'),
+    ).toBeInTheDocument();
+    expect(decodeAudioData).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('conserva el reproductor y ofrece reintento cuando la decodificación falla', async () => {
+    const user = userEvent.setup();
+    const analyzeAudio = vi.fn().mockResolvedValue({
+      status: 'error',
+      error: {
+        code: 'decode_failed',
+        message:
+          'No pudimos decodificar esta grabación. Puedes escucharla si el reproductor funciona o grabar una nueva.',
+      },
+    });
+    render(<AudioRecorderCard analyzeAudio={analyzeAudio} />);
+
+    await user.click(screen.getByRole('button', { name: 'Iniciar prueba' }));
+    act(() => {
+      MockMediaRecorder.instances[0]?.emitData(
+        new Blob(['audio-incompatible'], { type: 'audio/webm' }),
+      );
+    });
+    currentTimeMs = 1_200;
+    await user.click(screen.getByRole('button', { name: 'Detener grabación' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Analizar grabación' }),
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /no pudimos decodificar/i,
+    );
+    expect(
+      screen.getByLabelText('Reproducir la grabación local'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Analizar nuevamente' }),
+    ).toBeEnabled();
+  });
+
+  it('ignora un resultado tardío y libera la URL al desmontar durante el análisis', async () => {
+    const user = userEvent.setup();
+    const analysisRequest = createDeferred<AudioAnalysisResult>();
+    const analyzeAudio = vi.fn().mockReturnValue(analysisRequest.promise);
+    const { unmount } = render(
+      <AudioRecorderCard analyzeAudio={analyzeAudio} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Iniciar prueba' }));
+    act(() => {
+      MockMediaRecorder.instances[0]?.emitData(
+        new Blob(['audio-ficticio'], { type: 'audio/webm' }),
+      );
+    });
+    currentTimeMs = 1_200;
+    await user.click(screen.getByRole('button', { name: 'Detener grabación' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Analizar grabación' }),
+    );
+    expect(analyzeAudio).toHaveBeenCalledTimes(1);
+
+    unmount();
+    await act(async () => {
+      analysisRequest.resolve({
+        status: 'error',
+        error: {
+          code: 'decode_failed',
+          message: 'Resultado tardío ficticio.',
+        },
+      });
+      await analysisRequest.promise;
+    });
+
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:rimay-test');
   });
 });

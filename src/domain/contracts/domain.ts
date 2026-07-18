@@ -1,3 +1,5 @@
+import type { DeterministicMetrics } from '../audio/types';
+
 export type ProviderMode = 'demo' | 'live';
 export type UserRole = 'patient' | 'professional';
 export type ExerciseType = 'word' | 'phrase' | 'guided_reading';
@@ -18,32 +20,7 @@ export interface RecordingMetadata {
   durationMs: number;
   sizeBytes: number;
   sampleRateHz: number | null;
-}
-
-export type AudioQualityFlag =
-  | 'audio_empty'
-  | 'audio_too_short'
-  | 'audio_too_long'
-  | 'file_too_large'
-  | 'low_voiced_ratio'
-  | 'excessive_clipping'
-  | 'transcript_unavailable'
-  | 'transcript_low_confidence';
-
-export interface DeterministicMetrics {
-  algorithmVersion: string;
-  durationMs: number;
-  voicedDurationMs: number;
-  voicedRatio: number;
-  pauseCount: number;
-  pauseDurationMs: number;
-  meanPauseMs: number;
-  maxPauseMs: number;
-  clippingRatio: number;
-  wordsPerMinute: number | null;
-  targetSimilarity: number | null;
-  targetWordCoverage: number | null;
-  qualityFlags: readonly AudioQualityFlag[];
+  channelCount: number | null;
 }
 
 export interface TranscriptionResult {
@@ -108,4 +85,3 @@ export interface ProfessionalSummary {
   disclaimer: string;
   source: 'model' | 'deterministic_fallback';
 }
-

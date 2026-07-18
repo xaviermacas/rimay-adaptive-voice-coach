@@ -1,10 +1,8 @@
 export type {
   Attempt,
-  AudioQualityFlag,
   CoachEvidence,
   CoachRequest,
   CoachResponse,
-  DeterministicMetrics,
   Difficulty,
   Exercise,
   ExerciseType,
@@ -16,9 +14,12 @@ export type {
   UserRole,
 } from './domain';
 export type {
+  AudioQualityFlag,
+  DeterministicMetrics,
+} from '../audio/types';
+export type {
   Coach,
   SessionRepository,
   SpeechOutput,
   Transcriber,
 } from './providers';
-

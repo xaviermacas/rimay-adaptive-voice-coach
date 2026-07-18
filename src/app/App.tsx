@@ -22,13 +22,13 @@ export function App() {
 
       <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
         <div className="max-w-4xl">
-          <p className="text-sm font-semibold text-rimay-700">Incremento técnico 1</p>
+          <p className="text-sm font-semibold text-rimay-700">Incremento técnico 2</p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
             Comprueba tu micrófono con tranquilidad
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-700">
-            Este primer prototipo demuestra captura y reproducción local. Todavía no
-            analiza, transcribe ni evalúa la voz.
+            Este prototipo demuestra captura, reproducción y métricas técnicas
+            calculadas localmente. No transcribe ni evalúa clínicamente la voz.
           </p>
         </div>
 
@@ -53,4 +53,3 @@ export function App() {
     </div>
   );
 }
-

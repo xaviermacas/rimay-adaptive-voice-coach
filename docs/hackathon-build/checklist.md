@@ -61,6 +61,8 @@ Además, recorrido manual por teclado en Chrome y Edge, inspección de consola y
 
 ## Incremento 2 — Procesamiento PCM y métricas deterministas
 
+**Estado: COMPLETADO — 2026-07-18**
+
 **Objetivo**
 
 Decodificar una captura y producir `audio-metrics-v1` de forma pura, reproducible y probada antes de depender de servicios externos.
@@ -90,6 +92,23 @@ npm run build
 ```
 
 Comparar además una grabación real con los resultados visibles y confirmar que no se guardó PCM.
+
+**Evidencia de implementación — 2026-07-18**
+
+- [x] `audio-metrics-v1` implementa los umbrales y fórmulas de `spec.md` en módulos puros sin dependencias de React.
+- [x] Fixtures sintéticos programáticos cubren silencio, seno continuo, pausas conocidas, unión inferior a 200 ms, límite exacto de 200 ms, transitorio inferior a 120 ms, clipping, captura corta y silenciosa, estéreo y frecuencias de 8/48 kHz.
+- [x] Entradas vacías, no finitas, multicanal inconsistente y configuración inválida devuelven errores tipados sin métricas fabricadas.
+- [x] `AudioContext.decodeAudioData` se prueba con éxito, fallo, Web Audio ausente y cierre del contexto; el reproductor permanece disponible ante error.
+- [x] La interfaz presenta progreso, resultado técnico redondeado, versión del algoritmo, aviso no clínico y acciones para reanalizar o descartar.
+- [x] Prueba de integración: Blob grabado simulado → decodificación Web Audio simulada → presentación del resultado.
+- [x] `npm.cmd run lint`: código 0, sin errores ni advertencias.
+- [x] `npm.cmd run typecheck`: código 0.
+- [x] `npm.cmd test -- audio`: 3 archivos y 37 pruebas aprobadas.
+- [x] `npm.cmd test`: 5 archivos y 41 pruebas aprobadas.
+- [x] `npm.cmd run build`: 28 módulos transformados y build de producción generado.
+- [x] Validación manual en Chrome y Edge con grabaciones reales, Network, Storage y consola.
+
+**Cierre:** el responsable confirmó la validación manual final en Chrome y Edge. Todos los criterios de aceptación y verificación del incremento 2 están cubiertos. Cualquier trabajo del incremento 3 requiere una nueva autorización explícita.
 
 ## Incremento 3 — Prueba live de transcripción
 

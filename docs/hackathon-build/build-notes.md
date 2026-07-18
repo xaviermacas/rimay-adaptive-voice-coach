@@ -73,6 +73,127 @@ El responsable confirmó los siguientes resultados sin observaciones pendientes:
 
 **Cierre:** la validación manual final fue completada correctamente y el incremento 1 queda cerrado. No se autoriza trabajo del incremento 2 mediante este cierre.
 
+## Registro del incremento 2
+
+- Fecha de ejecución: 2026-07-18.
+- Estado: incremento 2 completado y validado manualmente por el responsable.
+- Autorización aplicada: exclusivamente decodificación PCM y métricas deterministas locales. No se implementaron transcripción, WPM, similitud, proveedores live, Supabase, OpenAI, adaptación, sesiones ni panel profesional.
+- Dependencias: no se agregaron ni actualizaron paquetes.
+- Diseño: captura, decodificación, PCM, cálculo y presentación permanecen separados. La matemática vive en `src/domain/audio/`, la configuración en `src/config/audioAnalysis.ts` y Web Audio/estado de interfaz en `src/features/audio-analysis/`.
+- Versión inicial: `audio-metrics-v1`. La misma entrada PCM, frecuencia y configuración producen el mismo objeto; cualquier cambio de significado requiere una nueva versión.
+- Contrato de fallo: `unsupported_audio`, `decode_failed`, `insufficient_samples`, `invalid_audio_data` e `invalid_configuration` son errores tipados y no banderas. Sin PCM válido no se crea un objeto de métricas.
+- Recursos: cada análisis de Blob crea un `AudioContext` y lo cierra en `finally`, tanto en éxito como en fallo. Un resultado tardío se ignora tras reset o desmontaje; el Blob y su URL siguen bajo el ciclo de vida temporal de la grabación.
+- Privacidad: no existe `fetch`, persistencia, serialización de PCM ni logs de audio. El análisis ocurre completamente en el navegador.
+
+### Fórmulas y método de `audio-metrics-v1`
+
+1. Se valida que la frecuencia sea un entero positivo, que exista al menos un canal y una muestra, que todos los canales tengan la misma longitud y que cada muestra sea finita dentro de `[-1, 1]`.
+2. La señal mono es el promedio aritmético por posición de todos los canales: `mono[i] = sum(channel[i]) / channelCount`.
+3. `sampleRateHz` y `channelCount` describen el buffer de origen. `totalDurationMs = round(sampleCount / sampleRateHz × 1000)` y `analyzedDurationMs` coincide con esa duración porque v1 analiza todas las muestras.
+4. El tamaño de ventana discreto es `max(1, round(sampleRateHz × 20 / 1000))` muestras; las ventanas son consecutivas y la última puede ser menor.
+5. RMS por ventana y RMS global usan `sqrt(sum(sample²) / sampleCount)`. El contrato expone el RMS global como `rms`, redondeado a seis decimales.
+6. `peak = max(abs(sample))`, redondeado a seis decimales.
+7. El piso estimado de ruido ordena los RMS de ventana y toma el índice `floor(0.20 × (n - 1))`. `adaptiveVoiceThresholdRms = max(0.015, estimatedNoiseFloorRms × 3)`.
+8. Una ventana es actividad cuando `windowRms >= adaptiveVoiceThresholdRms`. Ventanas contiguas forman segmentos; segmentos separados por menos de 200 ms se unen y el intervalo unido forma parte de la duración estimada. Después se descartan segmentos menores de 120 ms.
+9. `estimatedSpeechDurationMs` es la suma redondeada de las muestras de los segmentos finales. `silenceDurationMs` usa las muestras restantes y `silenceRatio = silenceSampleCount / totalSampleCount`, redondeado a seis decimales.
+10. Una pausa es un intervalo interno entre segmentos finales de al menos 300 ms. `pauseCount` cuenta esos intervalos, `averagePauseDurationMs` redondea su media y `maximumPauseDurationMs` redondea el máximo; ambos son `null` cuando no hay pausas.
+11. Una muestra cuenta como clipped si `abs(sample) >= 0.99`. `clippedSampleRatio = clippedSampleCount / totalSampleCount`, redondeado a seis decimales, y `possibleClipping` se activa cuando el ratio es mayor o igual a `0.001`.
+12. `wordCount`, `wordsPerMinute` y `promptSimilarity` permanecen en `null` porque este incremento no implementa transcripción ni métricas textuales.
+
+### Parámetros experimentales
+
+Estos valores son heurísticas de calidad de captura para la demostración, no están clínicamente validados y no clasifican a una persona.
+
+| Parámetro | Valor v1 | Unidad o regla |
+| --- | ---: | --- |
+| Ventana | 20 | ms |
+| Percentil de piso de ruido | 20 | % de RMS de ventanas |
+| Umbral mínimo de voz | 0.015 | amplitud RMS relativa |
+| Multiplicador de ruido | 3 | factor |
+| Unión de silencio | menor de 200 | ms |
+| Segmento mínimo de voz | 120 | ms |
+| Pausa interna mínima | 300 | ms |
+| Muestra cercana a clipping | `abs(sample) >= 0.99` | amplitud relativa |
+| Ratio para posible clipping | `>= 0.001` | proporción de muestras |
+| Captura demasiado corta | menor de 500 | ms |
+| Voz insuficiente | menor de 300 | ms estimados |
+| Captura demasiado silenciosa | RMS global menor de 0.01 | amplitud RMS relativa |
+
+Las banderas de calidad se emiten en orden estable: `audio_too_short`, `no_speech_detected`, `too_quiet`, `possible_clipping` y `transcription_missing`. Los fallos de decodificación y las muestras insuficientes se mantienen fuera del objeto de métricas, como exige `spec.md`.
+
+### Presentación y redondeo
+
+- El dominio conserva duraciones en milisegundos enteros y amplitudes/ratios con seis decimales.
+- La interfaz muestra duraciones con una cifra decimal en segundos, RMS y pico con tres decimales, ratios con una cifra decimal porcentual y muestreo con una cifra decimal en kHz.
+- Cero pausas se presenta como `0` y duración promedio `No aplica`.
+- El resultado muestra siempre `algorithmVersion` y la nota: “Estas métricas son técnicas y experimentales. No representan una evaluación clínica.”
+
+### Pruebas y verificación automática
+
+- Fixtures generados en memoria: silencio, seno continuo, actividad con dos pausas, brecha de 180 ms que se une, frontera exacta de 200 ms que no se une, transitorio de 100 ms, clipping total y ratio exacto, captura corta, captura silenciosa, estéreo y señales equivalentes a 8/48 kHz.
+- Casos adversos: Blob vacío, decodificación rechazada, Web Audio ausente, buffer inconsistente, muestra no finita, canales de distinta longitud y configuración inválida.
+- Integración: Blob de `MediaRecorder` simulado, `decodeAudioData` simulado, estado de procesamiento, resumen visible, reproductor conservado y `AudioContext.close()` observado.
+- Ciclo de vida: resultado tardío ignorado y URL temporal revocada al desmontar durante el análisis.
+- `npm.cmd run lint`: código 0, sin errores ni advertencias.
+- `npm.cmd run typecheck`: código 0.
+- `npm.cmd test -- audio`: 3 archivos y 37 pruebas aprobadas.
+- `npm.cmd test`: 5 archivos y 41 pruebas aprobadas.
+- `npm.cmd run build`: 28 módulos transformados; build Vite completado.
+
+### Limitaciones y riesgos pendientes
+
+- El percentil 20 se calcula sobre todas las ventanas, exactamente como define v1. Una señal continua y uniforme sin tramos de menor nivel puede elevar el piso estimado y quedar bajo `no_speech_detected`; cambiar la estimación requeriría `audio-metrics-v2` y nuevos fixtures.
+- `excessive_silence` no se emite porque v1 no define un umbral para esa clasificación. Se exponen `silenceDurationMs`, `silenceRatio` y `no_speech_detected` sin inventar otro límite.
+- La compatibilidad real de codecs depende de Chrome/Edge y debe confirmarse con grabaciones reales; las pruebas automatizadas simulan la decodificación.
+- La duración capturada mediante reloj y la duración PCM decodificada pueden diferir ligeramente por el contenedor y la decodificación del navegador. La diferencia observada durante la validación manual se considera una limitación técnica esperada, no un defecto.
+- `decodeAudioData` no ofrece cancelación portable. Al descartar o desmontar, Rimay ignora el resultado tardío y espera el cierre seguro del contexto.
+- No existe interpretación clínica, transcripción, WPM, reconocimiento de palabras ni análisis fonético.
+
+### Validación manual final confirmada
+
+El responsable confirmó los siguientes resultados reales:
+
+**Chrome — grabación con voz**
+
+- Duración capturada: 14.3 s.
+- Duración analizada: 13.9 s.
+- RMS global: 0.045.
+- Pico máximo: 0.493.
+- Tiempo estimado de voz: 8.3 s.
+- Se detectó una pausa interna.
+- Duración promedio de pausa: 1.3 s.
+- Proporción de silencio: 40.7 %.
+- Sin alertas técnicas.
+- La reproducción local fue audible.
+- “Analizar nuevamente” funcionó.
+- “Descartar y grabar de nuevo” funcionó.
+
+**Chrome — grabación en silencio**
+
+- Duración capturada: 5.6 s.
+- Duración analizada: 5.2 s.
+- RMS global: 0.000.
+- Pico máximo: 0.002.
+- Tiempo estimado de voz: 0.0 s.
+- Pausas detectadas: 0.
+- Proporción de silencio: 100 %.
+- Se mostró correctamente que no se detectó suficiente actividad de voz.
+- Se mostró correctamente que el nivel de captura fue demasiado bajo.
+
+**Validación adicional**
+
+- Una grabación con una pausa deliberada detectó correctamente la pausa.
+- La consola permaneció sin errores.
+- El análisis no generó solicitudes de red.
+- No apareció audio, PCM ni métricas persistidas en Storage.
+- El audio permaneció únicamente en memoria.
+- El flujo fue comprobado también en Edge.
+- No se observaron errores de codec durante la prueba.
+
+La diferencia pequeña entre duración capturada y duración decodificada se considera esperable por el contenedor y la decodificación del navegador. Se registra como limitación técnica conocida, no como un defecto.
+
+**Cierre:** la validación manual final fue completada correctamente y el incremento 2 queda cerrado. No se autoriza trabajo del incremento 3 mediante este cierre.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |

@@ -1,3 +1,8 @@
+import { AudioMetricsSummary } from '../audio-analysis/AudioMetricsSummary';
+import {
+  useAudioAnalysis,
+  type AudioBlobAnalyzer,
+} from '../audio-analysis/useAudioAnalysis';
 import { useAudioRecorder, type RecorderStatus } from './useAudioRecorder';
 
 const STATUS_MESSAGES: Readonly<Record<RecorderStatus, string>> = {
@@ -13,7 +18,11 @@ function formatDuration(durationMs: number): string {
   return `${(durationMs / 1_000).toFixed(1)} s`;
 }
 
-export function AudioRecorderCard() {
+interface AudioRecorderCardProps {
+  readonly analyzeAudio?: AudioBlobAnalyzer;
+}
+
+export function AudioRecorderCard({ analyzeAudio }: AudioRecorderCardProps) {
   const {
     activeMimeType,
     error,
@@ -23,11 +32,27 @@ export function AudioRecorderCard() {
     status,
     stopRecording,
   } = useAudioRecorder();
+  const {
+    analyze,
+    reset: resetAnalysis,
+    state: analysisState,
+  } = useAudioAnalysis(analyzeAudio);
 
   const recordingIsActive =
     status === 'requestingPermission' ||
     status === 'recording' ||
-    status === 'processing';
+    status === 'processing' ||
+    analysisState.status === 'analyzing';
+
+  const startNewRecording = () => {
+    resetAnalysis();
+    void startRecording();
+  };
+
+  const discardRecording = () => {
+    resetAnalysis();
+    reset();
+  };
 
   return (
     <section
@@ -85,7 +110,7 @@ export function AudioRecorderCard() {
         <button
           className="min-h-11 rounded-xl bg-rimay-700 px-5 py-3 font-semibold text-white transition hover:bg-rimay-900 disabled:cursor-not-allowed disabled:bg-slate-400"
           disabled={recordingIsActive}
-          onClick={() => void startRecording()}
+          onClick={startNewRecording}
           type="button"
         >
           {status === 'recorded' || status === 'error'
@@ -118,13 +143,59 @@ export function AudioRecorderCard() {
           >
             Tu navegador no puede reproducir este audio.
           </audio>
-          <button
-            className="mt-4 min-h-11 rounded-xl px-4 py-2 font-semibold text-rimay-900 underline decoration-2 underline-offset-4 hover:bg-rimay-100"
-            onClick={reset}
-            type="button"
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              className="min-h-11 rounded-xl bg-sky-800 px-5 py-3 font-semibold text-white transition hover:bg-sky-950 disabled:cursor-not-allowed disabled:bg-slate-400"
+              disabled={analysisState.status === 'analyzing'}
+              onClick={() => void analyze(recordedAudio.blob)}
+              type="button"
+            >
+              {analysisState.status === 'analyzing'
+                ? 'Analizando grabación…'
+                : analysisState.status === 'idle'
+                  ? 'Analizar grabación'
+                  : 'Analizar nuevamente'}
+            </button>
+            <button
+              className="min-h-11 rounded-xl px-4 py-2 font-semibold text-rimay-900 underline decoration-2 underline-offset-4 hover:bg-rimay-100"
+              onClick={discardRecording}
+              type="button"
+            >
+              Descartar y grabar de nuevo
+            </button>
+          </div>
+
+          <div
+            aria-atomic="true"
+            aria-live="polite"
+            className="mt-4 text-sm font-semibold text-slate-800"
+            role="status"
           >
-            Descartar grabación
-          </button>
+            {analysisState.status === 'idle' &&
+              'La grabación todavía no ha sido analizada.'}
+            {analysisState.status === 'analyzing' &&
+              'Procesando el audio localmente…'}
+            {analysisState.status === 'success' &&
+              'El análisis técnico terminó.'}
+            {analysisState.status === 'error' &&
+              'El análisis no se completó. La grabación sigue disponible.'}
+          </div>
+
+          {analysisState.status === 'error' && (
+            <div
+              aria-atomic="true"
+              className="mt-4 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-red-950"
+              role="alert"
+            >
+              <p className="font-semibold">No pudimos analizar la grabación.</p>
+              <p className="mt-1">{analysisState.error.message}</p>
+            </div>
+          )}
+
+          {analysisState.status === 'success' && (
+            <AudioMetricsSummary metrics={analysisState.metrics} />
+          )}
         </div>
       )}
 
