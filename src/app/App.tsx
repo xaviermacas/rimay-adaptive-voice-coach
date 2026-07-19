@@ -22,10 +22,10 @@ export function App() {
       <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
         <div className="max-w-4xl">
           <p className="text-sm font-semibold text-rimay-700">
-            Incremento 5 · Recorrido vertical de un intento
+            Incremento 6 · Tres ejercicios y voz accesible
           </p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
-            Practica una palabra a tu ritmo
+            Practica con instrucciones visibles y habladas
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-700">
             Elige una ruta de captura, revisa las métricas técnicas del intento y

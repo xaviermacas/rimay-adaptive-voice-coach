@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  EXERCISE_CATALOG,
+  INITIAL_EXERCISE,
+} from '../../domain/exercises';
 import { calculateTextMetrics } from '../../domain/text';
 import { resolveCoachEvidence, resolveCoachEvidenceKey } from './coachEvidence';
 import { buildPracticeCoachInput } from './practiceAttemptState';
 import {
   DEMO_AUDIO_METRICS_FIXTURE,
   DEMO_SPEECH_TEXT_FIXTURE,
-  PRACTICE_WORD_EXERCISE,
-  TEMPORARY_PRACTICE_CATALOG,
-} from './practiceFixture';
+} from './demoFixtures';
 
 function coachInput() {
   const textResult = calculateTextMetrics({
-    targetText: PRACTICE_WORD_EXERCISE.targetText,
+    targetText: INITIAL_EXERCISE.targetText,
     speechText: DEMO_SPEECH_TEXT_FIXTURE,
     audioEvidence: null,
   });
@@ -22,12 +24,12 @@ function coachInput() {
   return buildPracticeCoachInput({
     attemptId: 'evidence-attempt',
     currentExercise: {
-      ...PRACTICE_WORD_EXERCISE,
+      ...INITIAL_EXERCISE,
       pauseCues: [1, 3],
     },
     audioMetrics: { ...DEMO_AUDIO_METRICS_FIXTURE, pauseCount: 2 },
     textMetrics: textResult.metrics,
-    allowedExercises: TEMPORARY_PRACTICE_CATALOG,
+    allowedExercises: EXERCISE_CATALOG,
   });
 }
 

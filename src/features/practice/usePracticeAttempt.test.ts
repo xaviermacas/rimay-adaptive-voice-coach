@@ -10,8 +10,8 @@ import {
   type CoachResult,
 } from '../../domain/coaching';
 import {
-  PRACTICE_PHRASE_PREVIEW,
-} from './practiceFixture';
+  EXERCISE_CATALOG,
+} from '../../domain/exercises';
 import {
   usePracticeAttempt,
   type PracticeAttemptController,
@@ -113,7 +113,7 @@ describe('controlador de un intento', () => {
         ok: true,
         decision: {
           action: 'continue',
-          selectedExerciseId: PRACTICE_PHRASE_PREVIEW.id,
+          selectedExerciseId: EXERCISE_CATALOG[1].id,
           templateId: 'continue-text-demo-v1',
         },
       },
@@ -176,7 +176,7 @@ describe('controlador de un intento', () => {
 
     expect(result.current.state).toMatchObject({
       status: 'selection_preview',
-      selectedExercise: { id: PRACTICE_PHRASE_PREVIEW.id },
+      selectedExercise: { id: EXERCISE_CATALOG[1].id },
       generation: 2,
     });
     expect(result.current.recordedAudio).toBeNull();

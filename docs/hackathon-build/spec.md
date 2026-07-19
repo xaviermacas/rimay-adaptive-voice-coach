@@ -111,7 +111,7 @@ Codex y GPT-5.6 son herramientas de construcción usadas fuera de la aplicación
 
 - `SessionStart`: iniciar, continuar o descartar una sesión ficticia.
 - `ExerciseInstruction`: tipo, progreso, instrucción y texto a pronunciar.
-- `SpeechControls`: escuchar, detener y repetir voz del navegador.
+- `SpeechControls`: escuchar cuando no hay locución y detener mientras está activa; el mismo botón de escuchar permite una nueva reproducción explícita.
 - `RecognitionPrivacyChoice`: aviso y elección automática/manual.
 - `RecordingControls`: preparar micrófono, grabar, detener y estado.
 - `LiveRecognitionText`: muestra por separado texto provisional y final.
@@ -975,7 +975,7 @@ La síntesis puede hablar únicamente:
 
 No sintetiza texto reconocido, manual o simulado, `targetText` por separado, métricas, evidencia, IDs, versiones o avisos completos. Todo texto hablado tiene equivalente visible.
 
-Cada bloque hablable ofrece “Escuchar instrucción” o “Escuchar devolución”, “Detener voz” mientras exista una locución activa y “Repetir instrucción” o “Repetir devolución”. Los nombres distinguen repetir voz de “Repetir este intento”. No hay autoplay, pausa, reanudación, selector visible de voces o parámetros configurables.
+Cada bloque hablable ofrece un único control contextual: “Escuchar instrucción” o “Escuchar devolución” cuando no existe una locución activa, y “Detener voz” mientras se habla. Al finalizar, detener o recuperarse de un error, el mismo control vuelve a “Escuchar” y una nueva pulsación explícita llama otra vez a `speak(text)`. No existen controles separados “Repetir instrucción” o “Repetir devolución”; “Repetir este intento” permanece como acción distinta del flujo de práctica. No hay autoplay, pausa, reanudación, selector visible de voces o parámetros configurables.
 
 Los parámetros fijos son `rate = 1`, `pitch = 1` y `volume = 1`. El idioma preferido es `es-EC`; cuando se elige otra variante española válida, la locución puede usar el tag de esa voz.
 
@@ -990,7 +990,7 @@ El adaptador obtiene la lista vigente mediante `getVoices()` y selecciona en est
 
 Dentro de cada grupo se prioriza `default` y después `voiceURI`, `lang` y `name` mediante comparación ordinal. La identidad estable combina `voiceURI`, `lang` y `name`; no se usa sólo el nombre, no se usa `localeCompare` y no se persiste la selección. Si no existe voz española, el adaptador no usa silenciosamente otro idioma: conserva el texto, muestra que la voz no está disponible y permite completar el recorrido.
 
-`getVoices()` puede comenzar vacío. El adaptador escucha `voiceschanged`, vuelve a obtener la lista completa y selecciona siempre un objeto de voz vigente; no conserva objetos obsoletos. Mantiene una sola locución activa, cancela la anterior antes de hablar y usa una generación monotónica para ignorar eventos tardíos. Una repetición rápida conserva sólo la última solicitud. Las cancelaciones esperadas no se muestran como error; los errores reales son no bloqueantes y dejan disponible el texto.
+`getVoices()` puede comenzar vacío. El adaptador escucha `voiceschanged`, vuelve a obtener la lista completa y selecciona siempre un objeto de voz vigente; no conserva objetos obsoletos. Mantiene una sola locución activa, cancela la anterior antes de hablar y usa una generación monotónica para ignorar eventos tardíos. Clics rápidos en “Escuchar” conservan sólo la última solicitud. Las cancelaciones esperadas no se muestran como error; los errores reales son no bloqueantes y dejan disponible el texto.
 
 La voz se cancela antes de iniciar micrófono o reconocimiento, repetir el intento, descartar, continuar, cambiar de ejercicio, entrar en error o desmontar. Al desmontar también se retiran listeners y callbacks. Los eventos de síntesis y `voiceschanged` no mueven el foco ni recalculan decisiones.
 

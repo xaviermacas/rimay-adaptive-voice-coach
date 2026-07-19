@@ -3,6 +3,11 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { AUDIO_METRICS_V1_CONFIG } from '../../config/audioAnalysis';
 import type { SpeechRecognizer } from '../../domain/contracts';
 import { evaluateCoach as evaluateCoachDefault, type CoachResult } from '../../domain/coaching';
+import {
+  EXERCISE_CATALOG,
+  INITIAL_EXERCISE,
+  findExerciseById,
+} from '../../domain/exercises';
 import { calculateTextMetrics, createSpeechTextResult } from '../../domain/text';
 import { analyzeAudioBlob } from '../audio-analysis/analyzeAudio';
 import type { AudioBlobAnalyzer } from '../audio-analysis/useAudioAnalysis';
@@ -28,14 +33,13 @@ import {
 import {
   DEMO_AUDIO_METRICS_FIXTURE,
   DEMO_SPEECH_TEXT_FIXTURE,
-  PRACTICE_WORD_EXERCISE,
-  TEMPORARY_PRACTICE_CATALOG,
-} from './practiceFixture';
+} from './demoFixtures';
 
 export interface UsePracticeAttemptOptions {
   readonly analyzeAudio?: AudioBlobAnalyzer;
   readonly browserRecognizer?: SpeechRecognizer;
   readonly evaluateCoach?: (input: unknown) => CoachResult;
+  readonly stopSpeech?: (() => void) | undefined;
 }
 
 export interface PracticeAttemptController {
@@ -69,6 +73,8 @@ const ACTIVE_RECOGNITION_STATUSES = new Set([
   'processing',
 ] as const);
 
+const DO_NOTHING = () => undefined;
+
 function recognitionIsTerminal(
   status: PracticeAttemptController['recognitionState']['status'],
 ): boolean {
@@ -82,13 +88,14 @@ export function usePracticeAttempt(
 ): PracticeAttemptController {
   const analyzeAudio = options.analyzeAudio ?? analyzeAudioBlob;
   const coachEvaluator = options.evaluateCoach ?? evaluateCoachDefault;
+  const stopSpeech = options.stopSpeech ?? DO_NOTHING;
   const recorder = useAudioRecorder();
   const recognition = useSpeechRecognition({
     browserRecognizer: options.browserRecognizer,
   });
   const [state, dispatch] = useReducer(
     transitionPracticeAttempt,
-    createInitialPracticeState('practice-attempt-1', 1, PRACTICE_WORD_EXERCISE),
+    createInitialPracticeState('practice-attempt-1', 1, INITIAL_EXERCISE),
   );
   const [manualText, setManualTextValue] = useState('');
   const [manualInputError, setManualInputError] =
@@ -126,6 +133,7 @@ export function usePracticeAttempt(
       recorder.status === 'error' &&
       recorder.error !== null
     ) {
+      stopSpeech();
       recognition.cancel();
       dispatch({
         type: 'recoverable_error',
@@ -161,7 +169,7 @@ export function usePracticeAttempt(
         recognitionError,
       });
     }
-  }, [recognition, recorder, state]);
+  }, [recognition, recorder, state, stopSpeech]);
 
   useEffect(() => {
     if (
@@ -206,6 +214,8 @@ export function usePracticeAttempt(
       return;
     }
 
+    stopSpeech();
+
     if (state.mode === 'demo') {
       dispatch({ type: 'demo_ready', speechText: DEMO_SPEECH_TEXT_FIXTURE });
       return;
@@ -228,7 +238,7 @@ export function usePracticeAttempt(
     if (state.mode === 'browser') {
       recognition.start('browser');
     }
-  }, [recognition, recorder, state]);
+  }, [recognition, recorder, state, stopSpeech]);
 
   const stopRecording = useCallback(() => {
     if (state.status !== 'recording') {
@@ -315,6 +325,7 @@ export function usePracticeAttempt(
       }
 
       if (audioResult.status === 'error') {
+        stopSpeech();
         dispatch({
           type: 'recoverable_error',
           error: audioAnalysisPracticeError(audioResult.error),
@@ -344,6 +355,7 @@ export function usePracticeAttempt(
                 },
         });
         if (textResult.status === 'error') {
+          stopSpeech();
           dispatch({
             type: 'recoverable_error',
             error: textMetricsPracticeError(textResult.error),
@@ -362,10 +374,11 @@ export function usePracticeAttempt(
         currentExercise,
         audioMetrics: audioResult.metrics,
         textMetrics,
-        allowedExercises: TEMPORARY_PRACTICE_CATALOG,
+        allowedExercises: EXERCISE_CATALOG,
       });
       const coachResult = coachEvaluator(coachInput);
       if (!coachResult.ok) {
+        stopSpeech();
         dispatch({
           type: 'recoverable_error',
           error: coachingPracticeError(coachResult.error),
@@ -377,6 +390,7 @@ export function usePracticeAttempt(
         return;
       }
       if (coachResult.decision.action === 'complete_session') {
+        stopSpeech();
         dispatch({
           type: 'recoverable_error',
           error: applicationPracticeError('unexpected_coach_action'),
@@ -398,7 +412,13 @@ export function usePracticeAttempt(
         });
       }
     }
-  }, [analyzeAudio, coachEvaluator, recorder.recordedAudio, state]);
+  }, [
+    analyzeAudio,
+    coachEvaluator,
+    recorder.recordedAudio,
+    state,
+    stopSpeech,
+  ]);
 
   const repeatAttempt = useCallback(() => {
     if (
@@ -407,8 +427,9 @@ export function usePracticeAttempt(
     ) {
       return;
     }
+    stopSpeech();
     restartWithNewAttempt();
-  }, [restartWithNewAttempt, state]);
+  }, [restartWithNewAttempt, state, stopSpeech]);
 
   const continueToPreview = useCallback(() => {
     if (
@@ -418,10 +439,13 @@ export function usePracticeAttempt(
       return;
     }
 
+    stopSpeech();
+
     const selectedExerciseId = state.coachResult.decision.selectedExerciseId;
-    const selectedExercise = TEMPORARY_PRACTICE_CATALOG.find(
-      (exercise) => exercise.id === selectedExerciseId,
-    );
+    const selectedExercise =
+      selectedExerciseId === null
+        ? undefined
+        : findExerciseById(selectedExerciseId);
     if (selectedExerciseId === null || selectedExercise === undefined) {
       dispatch({
         type: 'recoverable_error',
@@ -440,7 +464,12 @@ export function usePracticeAttempt(
       generation,
       selectedExercise,
     });
-  }, [invalidateAttemptResources, recorder.recordedAudio, state]);
+  }, [invalidateAttemptResources, recorder.recordedAudio, state, stopSpeech]);
+
+  const discardAttempt = useCallback(() => {
+    stopSpeech();
+    restartWithNewAttempt();
+  }, [restartWithNewAttempt, stopSpeech]);
 
   const retryAnalysis = useCallback(() => {
     dispatch({ type: 'retry_analysis' });
@@ -465,7 +494,7 @@ export function usePracticeAttempt(
         : false,
     continueToPreview,
     continueWithoutText,
-    discardAttempt: restartWithNewAttempt,
+    discardAttempt,
     editText,
     manualInputError,
     manualText,

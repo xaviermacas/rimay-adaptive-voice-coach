@@ -9,6 +9,10 @@ import type {
   SpeechRecognizer,
 } from '../../domain/contracts';
 import { evaluateCoach, type CoachInput, type CoachResult } from '../../domain/coaching';
+import {
+  createSpeechOutputHarness,
+  spanishVoice,
+} from '../../test/fixtures/speech-output/browserSpeechOutput';
 import { PracticeAttemptFlow } from './PracticeAttemptFlow';
 
 class FunctionalMediaRecorder {
@@ -278,6 +282,284 @@ describe('PracticeAttemptFlow', () => {
     expect(screen.getByText('Camino con calma.')).toBeInTheDocument();
     expect(coachEvaluator).toHaveBeenCalledOnce();
     expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it('reutiliza escuchar tras finalizar o detener sin controles redundantes', async () => {
+    const { output, synthesis } = createSpeechOutputHarness();
+    render(<PracticeAttemptFlow speechOutput={output} />);
+
+    expect(synthesis.utterances).toHaveLength(0);
+    expect(
+      screen.queryByRole('button', { name: 'Repetir instrucción' }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Escuchar instrucción' }),
+    );
+    expect(synthesis.utterances.map(({ text }) => text)).toEqual([
+      'Pronuncia la palabra visible cuando estés listo.',
+    ]);
+    expect(synthesis.utterances[0]?.text).not.toContain('casa');
+    const stopButton = screen.getByRole('button', { name: 'Detener voz' });
+    expect(document.activeElement).toBe(stopButton);
+    expect(
+      screen.queryByRole('button', { name: 'Escuchar instrucción' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Repetir instrucción' }),
+    ).not.toBeInTheDocument();
+
+    act(() => synthesis.utterances[0]?.finish());
+    const listenAfterEnd = await screen.findByRole('button', {
+      name: 'Escuchar instrucción',
+    });
+    expect(document.activeElement).toBe(listenAfterEnd);
+    await userEvent.click(listenAfterEnd);
+    expect(synthesis.utterances.map(({ text }) => text)).toEqual([
+      'Pronuncia la palabra visible cuando estés listo.',
+      'Pronuncia la palabra visible cuando estés listo.',
+    ]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Detener voz' }));
+    const listenAfterStop = await screen.findByRole('button', {
+      name: 'Escuchar instrucción',
+    });
+    expect(document.activeElement).toBe(listenAfterStop);
+    await userEvent.click(listenAfterStop);
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Detener voz' }),
+    );
+    expect(synthesis.utterances.map(({ text }) => text)).toEqual([
+      'Pronuncia la palabra visible cuando estés listo.',
+      'Pronuncia la palabra visible cuando estés listo.',
+      'Pronuncia la palabra visible cuando estés listo.',
+    ]);
+  });
+
+  it('cancela la instrucción antes de iniciar micrófono y grabación', async () => {
+    const { output, synthesis } = createSpeechOutputHarness();
+    render(<PracticeAttemptFlow speechOutput={output} />);
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Escuchar instrucción' }),
+    );
+    await openModeChoice();
+    const cancelCountBeforeCapture = synthesis.cancel.mock.calls.length;
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Iniciar grabación' }),
+    );
+
+    expect(synthesis.cancel.mock.calls.length).toBeGreaterThan(
+      cancelCountBeforeCapture,
+    );
+    expect(getUserMedia).toHaveBeenCalledOnce();
+  });
+
+  it('cancela la voz al descartar antes de volver a la instrucción', async () => {
+    const { output, synthesis } = createSpeechOutputHarness();
+    render(<PracticeAttemptFlow speechOutput={output} />);
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Escuchar instrucción' }),
+    );
+    await openModeChoice();
+    const cancelCountBeforeDiscard = synthesis.cancel.mock.calls.length;
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Volver a la instrucción' }),
+    );
+    expect(synthesis.cancel.mock.calls.length).toBeGreaterThan(
+      cancelCountBeforeDiscard,
+    );
+  });
+
+  it('vuelve a escuchar feedback sin cambiar intento o coaching y conserva repetir intento', async () => {
+    const { output, synthesis } = createSpeechOutputHarness();
+    const coachEvaluator = vi.fn((input: unknown) => {
+      void input;
+      return REPEAT_RESULT;
+    });
+    render(
+      <PracticeAttemptFlow
+        evaluateCoach={coachEvaluator}
+        speechOutput={output}
+      />,
+    );
+    await openModeChoice();
+    await userEvent.click(screen.getByRole('radio', { name: /demostración/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Cargar datos simulados' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Analizar intento' }),
+    );
+
+    expect(synthesis.utterances).toHaveLength(0);
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Escuchar devolución' }),
+    );
+    expect(synthesis.utterances[0]?.text).toBe(
+      'Prueba otra captura cuando estés listo. La captura necesita repetirse.',
+    );
+    expect(synthesis.utterances[0]?.text).not.toMatch(
+      /casa|practice-|audio-metrics|qualityFlags/,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Escuchar devolución' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Repetir devolución' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Repetir este intento' }),
+    ).toBeInTheDocument();
+
+    const initialCoachInput = coachEvaluator.mock.calls[0]?.[0];
+    expect(initialCoachInput).toMatchObject({
+      attemptId: 'practice-attempt-1',
+    });
+    act(() => synthesis.utterances[0]?.finish());
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Escuchar devolución' }),
+    );
+    expect(synthesis.utterances).toHaveLength(2);
+    expect(coachEvaluator).toHaveBeenCalledOnce();
+    expect(coachEvaluator.mock.calls[0]?.[0]).toBe(initialCoachInput);
+
+    const cancelCountBeforeRepeat = synthesis.cancel.mock.calls.length;
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Repetir este intento' }),
+    );
+    expect(synthesis.cancel.mock.calls.length).toBeGreaterThan(
+      cancelCountBeforeRepeat,
+    );
+    expect(
+      screen.getByRole('button', { name: 'Preparar intento' }),
+    ).toBeInTheDocument();
+  });
+
+  it('cancela feedback al continuar y muestra progreso 2 de 3 sin otra captura', async () => {
+    const { output, synthesis } = createSpeechOutputHarness();
+    const coachEvaluator = vi.fn(evaluateCoach);
+    render(
+      <PracticeAttemptFlow
+        evaluateCoach={coachEvaluator}
+        speechOutput={output}
+      />,
+    );
+    await openModeChoice();
+    await userEvent.click(screen.getByRole('radio', { name: /demostración/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Cargar datos simulados' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Analizar intento' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Escuchar devolución' }),
+    );
+    const cancelCountBeforeContinue = synthesis.cancel.mock.calls.length;
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+
+    expect(synthesis.cancel.mock.calls.length).toBeGreaterThan(
+      cancelCountBeforeContinue,
+    );
+    expect(screen.getByText('Ejercicio 2 de 3')).toBeInTheDocument();
+    expect(
+      screen.getByText('Pronuncia la frase visible cuando estés listo.'),
+    ).toBeInTheDocument();
+    expect(coachEvaluator).toHaveBeenCalledOnce();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(FunctionalMediaRecorder.instances).toHaveLength(0);
+  });
+
+  it('actualiza voces sin autoplay, foco o nueva evaluación de coaching', async () => {
+    const { output, synthesis } = createSpeechOutputHarness();
+    const coachEvaluator = vi.fn(evaluateCoach);
+    render(
+      <PracticeAttemptFlow
+        evaluateCoach={coachEvaluator}
+        speechOutput={output}
+      />,
+    );
+    await openModeChoice();
+    await userEvent.click(screen.getByRole('radio', { name: /demostración/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Cargar datos simulados' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Analizar intento' }),
+    );
+    const focusedElement = document.activeElement;
+
+    act(() => {
+      synthesis.emitVoicesChanged([
+        spanishVoice({ name: 'Nueva voz', voiceURI: 'voice:new' }),
+      ]);
+    });
+    expect(synthesis.utterances).toHaveLength(0);
+    expect(document.activeElement).toBe(focusedElement);
+    expect(coachEvaluator).toHaveBeenCalledOnce();
+  });
+
+  it('conserva feedback y acción ante un error real de síntesis', async () => {
+    const { output, synthesis } = createSpeechOutputHarness();
+    render(
+      <PracticeAttemptFlow
+        evaluateCoach={() => REPEAT_RESULT}
+        speechOutput={output}
+      />,
+    );
+    await openModeChoice();
+    await userEvent.click(screen.getByRole('radio', { name: /demostración/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Cargar datos simulados' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Analizar intento' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Escuchar devolución' }),
+    );
+    await act(async () => {
+      synthesis.utterances[0]?.fail();
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByRole('heading', { name: 'Devolución del intento' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Repetir este intento' }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/no pudo completar la locución/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Escuchar devolución' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Repetir devolución' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('mantiene todas las rutas disponibles cuando no existe voz', async () => {
+    const { output, synthesis } = createSpeechOutputHarness([]);
+    render(<PracticeAttemptFlow speechOutput={output} />);
+    expect(
+      screen.getByRole('button', { name: 'Escuchar instrucción' }),
+    ).toBeDisabled();
+    expect(screen.getByText(/buscando una voz en español/i)).toBeInTheDocument();
+
+    await openModeChoice();
+    await userEvent.click(screen.getByRole('radio', { name: /demostración/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Cargar datos simulados' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Analizar intento' }),
+    );
+    expect(
+      await screen.findByRole('heading', { name: 'Devolución del intento' }),
+    ).toBeInTheDocument();
+    expect(synthesis.utterances).toHaveLength(0);
   });
 
   it('espera el clic de repeat y vuelve sin iniciar otra captura', async () => {

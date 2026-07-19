@@ -1,9 +1,12 @@
 import type { DecisionReadyState } from './practiceAttemptState';
+import type { SpeechOutputController } from '../speech-output';
+import { SpeechControls } from '../speech-output';
 import { CoachEvidence } from './CoachEvidenceView';
 
 interface CoachFeedbackProps {
   readonly onContinue: () => void;
   readonly onRepeat: () => void;
+  readonly speech: SpeechOutputController;
   readonly state: DecisionReadyState;
 }
 
@@ -25,6 +28,7 @@ const SOURCE_LABELS = {
 export function CoachFeedback({
   onContinue,
   onRepeat,
+  speech,
   state,
 }: CoachFeedbackProps) {
   const { coachInput, coachResult } = state;
@@ -33,6 +37,7 @@ export function CoachFeedback({
     coachInput.textSource === null
       ? 'Sin texto final; no se calcularon métricas textuales'
       : SOURCE_LABELS[coachInput.textSource];
+  const spokenFeedback = `${decision.shortFeedback} ${decision.explanation}`;
 
   return (
     <section
@@ -53,6 +58,12 @@ export function CoachFeedback({
         {decision.shortFeedback}
       </p>
       <p className="mt-3 leading-7 text-slate-800">{decision.explanation}</p>
+
+      <SpeechControls
+        controller={speech}
+        kind="feedback"
+        text={spokenFeedback}
+      />
 
       <dl className="mt-5 grid gap-3 sm:grid-cols-2">
         <SummaryItem label="Foco" value={FOCUS_LABELS[decision.focus]} />

@@ -79,11 +79,11 @@ const COACH_ERROR_MESSAGES: Readonly<Record<CoachErrorCode, string>> = {
   incompatible_algorithm_version:
     'No pudimos preparar la devolución porque una versión de métricas no es compatible.',
   empty_allowed_exercises:
-    'No pudimos preparar la devolución porque falta el catálogo temporal de ejercicios.',
+    'No pudimos preparar la devolución porque falta el catálogo de ejercicios.',
   duplicate_exercise_id:
-    'No pudimos preparar la devolución porque el catálogo temporal contiene identificadores repetidos.',
+    'No pudimos preparar la devolución porque el catálogo contiene identificadores repetidos.',
   invalid_exercise:
-    'No pudimos preparar la devolución porque un ejercicio temporal no es válido.',
+    'No pudimos preparar la devolución porque un ejercicio no es válido.',
   missing_required_exercise_type:
     'No pudimos preparar la devolución porque falta el siguiente tipo de ejercicio permitido.',
   inconsistent_audio_metrics:

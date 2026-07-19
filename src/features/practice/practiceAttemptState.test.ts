@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  EXERCISE_CATALOG,
+  INITIAL_EXERCISE,
+} from '../../domain/exercises';
 import { createSpeechTextResult } from '../../domain/text';
 import {
   buildPracticeCoachInput,
@@ -8,9 +12,7 @@ import {
 } from './practiceAttemptState';
 import {
   DEMO_AUDIO_METRICS_FIXTURE,
-  PRACTICE_WORD_EXERCISE,
-  TEMPORARY_PRACTICE_CATALOG,
-} from './practiceFixture';
+} from './demoFixtures';
 
 const MANUAL_TEXT = createSpeechTextResult({
   originalText: 'casa',
@@ -25,7 +27,7 @@ describe('maquina de estados de un intento', () => {
     const initial = createInitialPracticeState(
       'practice-attempt-1',
       1,
-      PRACTICE_WORD_EXERCISE,
+      INITIAL_EXERCISE,
     );
     expect(transitionPracticeAttempt(initial, { type: 'analysis_started' })).toBe(
       initial,
@@ -67,7 +69,7 @@ describe('maquina de estados de un intento', () => {
     const initial = createInitialPracticeState(
       'practice-attempt-1',
       1,
-      PRACTICE_WORD_EXERCISE,
+      INITIAL_EXERCISE,
     );
     const privacy = transitionPracticeAttempt(initial, {
       type: 'choose_mode',
@@ -90,10 +92,10 @@ describe('maquina de estados de un intento', () => {
     expect(
       buildPracticeCoachInput({
         attemptId: 'practice-attempt-7',
-        currentExercise: PRACTICE_WORD_EXERCISE,
+        currentExercise: INITIAL_EXERCISE,
         audioMetrics: DEMO_AUDIO_METRICS_FIXTURE,
         textMetrics: null,
-        allowedExercises: TEMPORARY_PRACTICE_CATALOG,
+        allowedExercises: EXERCISE_CATALOG,
       }),
     ).toMatchObject({
       attemptId: 'practice-attempt-7',

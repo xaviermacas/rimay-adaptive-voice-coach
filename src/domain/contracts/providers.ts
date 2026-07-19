@@ -1,5 +1,5 @@
 export interface SpeechOutput {
-  speak(text: string, language: string): Promise<void>;
+  speak(text: string): Promise<void>;
   stop(): void;
-  isSupported(): boolean;
+  isAvailable(): boolean;
 }

@@ -504,15 +504,75 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 - Demo: los fixtures acústicos y textuales se separan del catálogo de ejercicios y conservan su rotulado. Demo permanece sin micrófono, grabación, reconocimiento o audio del usuario; una voz sintetizada opcional no convierte el fixture en una medición.
 - `SpeechOutput`: contrato canónico `speak(text: string): Promise<void>`, `stop(): void`, `isAvailable(): boolean`. Idioma y voz pertenecen al adaptador. No existe contrato paralelo `speak(text, language)` o `isSupported()` para salida y no se exponen objetos Web Speech al dominio.
 - Contenido hablado: sólo el valor visible exacto de `Exercise.instruction` y la concatenación visible `shortFeedback + " " + explanation`. No se habla texto reconocido, manual o simulado, `targetText` por separado, métricas, evidencia, IDs, versiones o avisos completos.
-- Controles y parámetros: escuchar, detener mientras habla y repetir instrucción/devolución; repetir voz se distingue de repetir intento. Sin autoplay, pausa/reanudación, selector visible o configuración. `rate = 1`, `pitch = 1`, `volume = 1`; idioma preferido `es-EC`.
+- Controles y parámetros: un único control contextual muestra escuchar cuando no habla y detener mientras habla. El mismo botón escuchar permite una nueva reproducción explícita; no existen botones separados para repetir instrucción/devolución y “Repetir este intento” conserva su semántica propia. Sin autoplay, pausa/reanudación, selector visible o configuración. `rate = 1`, `pitch = 1`, `volume = 1`; idioma preferido `es-EC`.
 - Selección de voz: voz local `es-EC`, cualquier `es-EC`, voz local `es-*`, cualquier `es-*`; dentro de grupo, `default`, `voiceURI`, `lang` y `name` ordinales. La identidad combina `voiceURI`, `lang` y `name`; no se persiste. Sin voz española, no se usa otro idioma silenciosamente y el recorrido textual continúa.
-- Ciclo de vida: `getVoices()` puede iniciar vacío; se escucha `voiceschanged`, se recarga la lista y no se retienen objetos obsoletos. Una sola locución activa, cancelación antes de hablar, generación contra eventos tardíos, última solicitud ante repetición rápida, cancelaciones esperadas no visibles y errores reales no bloqueantes. Listeners y voz se limpian al desmontar.
-- Integración de recursos: cancelar voz antes de micrófono, reconocimiento, repetir intento, descartar, continuar, cambiar ejercicio, entrar en error o desmontar. Repetir voz no cambia el estado; continuar cancela voz y termina en preview; cambiar voces no recalcula snapshots.
+- Ciclo de vida: `getVoices()` puede iniciar vacío; se escucha `voiceschanged`, se recarga la lista y no se retienen objetos obsoletos. Una sola locución activa, cancelación antes de hablar, generación contra eventos tardíos, última solicitud ante clics rápidos en escuchar, cancelaciones esperadas no visibles y errores reales no bloqueantes. Listeners y voz se limpian al desmontar.
+- Integración de recursos: cancelar voz antes de micrófono, reconocimiento, repetir intento, descartar, continuar, cambiar ejercicio, entrar en error o desmontar. Volver a escuchar no cambia el estado; continuar cancela voz y termina en preview; cambiar voces no recalcula snapshots.
 - Privacidad: sólo llegan al agente de síntesis instrucciones y feedback ficticio ya visibles; no se sintetizan textos del usuario, métricas o IDs y no existe `fetch`, telemetría o almacenamiento. Se prefiere `localService`, sin prometer que toda voz sea local u offline; algunas voces pueden ser gestionadas remotamente por el navegador.
 - Accesibilidad: texto equivalente, botones nativos por teclado, foco visible, controles adecuados, región de estado breve, detener mientras habla, pausas textuales, sin autoplay o autoavance, zoom 200 %, reflow, reduced motion, errores recuperables y lector de pantalla. Los eventos internos de síntesis no se anuncian individualmente ni mueven foco.
 - División interna futura: tramo A de catálogo y contratos; tramo B de núcleo de voz; tramo C de integración accesible. Los tres forman un único incremento y no autorizan commits parciales.
 - Revisión: el catálogo sólo puede declararse revisado técnica/editorialmente por el desarrollador durante el incremento. No se afirma revisión clínica externa; el filtro automático no sustituye revisión profesional y pausas/duraciones son reglas de interacción no clínicamente validadas.
 - Autorización: esta resolución no autoriza implementación. El código del incremento 6 requiere una solicitud expresa posterior.
+
+## Implementación automática del incremento 6
+
+- Fecha: 2026-07-19.
+- Estado: los tramos A, B y C fueron implementados y verificados automáticamente como un único incremento formal. La revalidación manual final en Chrome y Edge se completó correctamente; el cierre se registra a continuación y no se inició el incremento 7.
+- Dependencias: no se añadieron ni actualizaron paquetes. `package.json` y `package-lock.json` permanecen intactos.
+- Catálogo: `src/domain/exercises/` contiene exactamente `practice-word-casa`, `practice-phrase-calm` y `practice-guided-calm`, en orden palabra → frase → lectura. Sus dificultades, instrucciones, objetivos, pausas y duraciones coinciden con el contrato documental. `INITIAL_EXERCISE_SEQUENCE` contiene los tres IDs y el primer ejercicio se resuelve desde esa secuencia.
+- Validación: una función pura recibe catálogo y secuencia como `unknown`, devuelve éxito tipado o una lista estructurada de hallazgos, valida contrato, tamaño, tipos, IDs, dificultades, NFC, duraciones, pausas, orden, secuencia y lenguaje editorial, y produce copias readonly congeladas sin mutar la entrada.
+- Filtro editorial: cubre diagnóstico, severidad, pronóstico, recuperación/deterioro, tratamiento, prescripción, clasificación clínica, reemplazo de terapia, evaluación de inteligibilidad y aprobación clínica. Un fixture deliberadamente prohibido demuestra el rechazo; el filtro no sustituye revisión profesional.
+- Pausas: `pauseCues` se valida como fronteras UTF-16 posteriores a puntuación, estrictamente crecientes, dentro de rango y sin dividir pares sustitutos. La lectura canónica conserva longitud 43, coma en índice 24 y cue 25. La segmentación pura soporta múltiples cues y `GuidedReadingText` inserta el indicador textual “Pausa” sin modificar el objetivo ni atribuir duración clínica.
+- Coaching: el catálogo final sustituye todas las referencias temporales y se entrega como `allowedExercises`; palabra válida selecciona `practice-phrase-calm` y una frase válida con palabra cubierta selecciona `practice-guided-calm`. Se conserva `missing_required_exercise_type`, el ID seleccionado siempre se valida contra el catálogo y `coach-rules-v1`, reglas, plantillas, umbrales y versiones no cambiaron.
+- Demo: los fixtures acústico y textual viven en `demoFixtures.ts`, separados del catálogo. Demo continúa sin micrófono, `MediaRecorder`, reconocimiento, audio del usuario, WPM o red, y conserva sus tres avisos visibles de simulación.
+- Contrato de salida: `SpeechOutput` usa únicamente `speak(text: string): Promise<void>`, `stop(): void` e `isAvailable(): boolean`. Idioma y voz permanecen dentro del adaptador; no se exponen objetos Web Speech al dominio.
+- Selección de voz: la función pura prioriza voz local `es-EC`, cualquier `es-EC`, voz local `es-*` y cualquier `es-*`; dentro del grupo usa `default`, `voiceURI`, `lang` y `name` ordinales. Compara el idioma sin distinguir mayúsculas, conserva el objeto vigente, no usa `localeCompare`, no selecciona otros idiomas y no persiste preferencias.
+- Adaptador: `BrowserSpeechOutput` encapsula `speechSynthesis`, utterances, lista de voces, `speak`, `cancel` y `voiceschanged`. Usa parámetros 1/1/1, una generación monotónica, una sola locución, cancelación previa, resolución silenciosa de cancelaciones esperadas, rechazo tipado de fallos reales, recarga de objetos de voz y limpieza de listeners al desmontar.
+- Hook y controles: `useSpeechOutput` expone estados discriminados `unsupported`, `loading_voices`, `unavailable`, `ready`, `speaking`, `stopped` y `error`, además de disponibilidad, resumen de voz, `speak`, `stop` y limpieza. `SpeechControls` ofrece un único botón que alterna entre escuchar y detener según el estado, sin autoplay, pausa/reanudación, selector o movimiento automático de foco. `repeat()` y `lastText` se retiraron por quedar sin consumidores.
+- Integración: `ExerciseInstruction` muestra progreso, tipo, dificultad, instrucción y objetivo; la palabra actual usa “Ejercicio 1 de 3”, la preview de frase “Ejercicio 2 de 3” y las pruebas cubren lectura “Ejercicio 3 de 3”. `selection_preview` sigue terminal y no inicia segunda captura, sesión, contador o evaluación.
+- Contenido hablado: sólo se entrega la instrucción visible exacta o `${shortFeedback} ${explanation}`. Las pruebas comprueban que los payloads no incluyen objetivo por separado, texto del usuario, métricas, evidencias, IDs o versiones. Un fallo de síntesis conserva feedback, decisión y acciones.
+- Cancelación: la voz se detiene antes de iniciar micrófono o reconocimiento, repetir el intento, descartar, continuar, mostrar otro ejercicio, entrar en un error recuperable y desmontar. Volver a escuchar no altera el intento y `voiceschanged` no recalcula coaching ni mueve el foco.
+- Privacidad: no existe `fetch`, telemetría, almacenamiento o logs de contenido hablado. Se prefiere `localService`, pero la UI y documentación aclaran que algunas voces pueden usar infraestructura propia del navegador y Rimay no promete funcionamiento local u offline.
+- Accesibilidad: todo contenido hablado permanece visible, los controles son botones nativos con altura mínima de 44 px, foco visible y región de estado breve. Las pausas tienen texto, no hay autoplay o autoavance; la validación manual final confirmó teclado, foco, zoom 200 % y reflow en Chrome y Edge, y `prefers-reduced-motion` permanece activo.
+- Hallazgo de verificación: la primera ejecución global de lint detectó una actualización síncrona dentro del efecto de suscripción de voz. Se reordenó la suscripción para recibir el estado desde el callback del adaptador y conservar el remontaje de `StrictMode`; lint y todas las pruebas posteriores quedaron en verde.
+- Puerta A final: `npm.cmd run typecheck`, código 0; `npm.cmd test -- exercises`, 3 archivos y 37/37 pruebas.
+- Puerta B final: `npm.cmd run typecheck`, código 0; `npm.cmd test -- speech-output`, 4 archivos y 30/30 pruebas.
+- Puerta C final: `npm.cmd test -- practice`, 6 archivos y 32/32 pruebas.
+- Verificación global: `npm.cmd run lint`, código 0 sin errores ni advertencias; `npm.cmd run typecheck`, código 0; `npm.cmd test`, 29 archivos y 320/320 pruebas; `npm.cmd run build`, código 0, 66 módulos transformados y SPA estática generada.
+- Corrección de validación manual: se confirmó la redundancia de mostrar simultáneamente escuchar y repetir para el mismo texto. Se eliminaron “Repetir instrucción” y “Repetir devolución”; después de finalizar, detener o fallar vuelve el botón “Escuchar”, que crea otra solicitud explícita con el mismo contenido. “Repetir este intento” no cambió. Las pruebas conservan una sola locución, cancelaciones, foco, estado de intento y evaluación única de coaching.
+- Limitaciones automatizadas: jsdom y los dobles de navegador no demuestran disponibilidad, pronunciación, latencia o comportamiento real de las voces instaladas. La validación manual confirmó el comportamiento funcional en Chrome y Edge, pero no registró nombres o `voiceURI` concretos y no convierte el catálogo o la síntesis en contenido clínicamente validado.
+
+## Revalidación manual final y cierre del incremento 6
+
+- Fecha: 2026-07-19.
+- Dictamen: `APTO PARA CERRAR`.
+- Estado: la revalidación técnica, funcional y editorial fue completada correctamente por el responsable en Chrome y Edge. No quedaron defectos materiales pendientes; el incremento 6 queda completado y no se inició el incremento 7.
+- Alcance revisado: catálogo exacto, progreso presentacional, preview terminal, lectura guiada, selección española, instrucción y devolución habladas, control contextual, cancelaciones, demo, privacidad, accesibilidad, Console, Network y Storage. No se realizó revisión clínica o profesional externa.
+
+**Catálogo, progreso y preview**
+
+- Los tres ejercicios exactos fueron aprobados: palabra `practice-word-casa`, frase `practice-phrase-calm` y lectura `practice-guided-calm`, con sus dificultades, instrucciones, objetivos, duraciones y `pauseCues` canónicos.
+- “Ejercicio 1 de 3” y la preview “Ejercicio 2 de 3” aparecieron correctamente. La lectura guiada conservó el indicador textual “Pausa”.
+- La preview de la frase permaneció terminal: no inició segunda captura, otro intento, sesión, historial o nueva evaluación de coaching.
+- La revisión del catálogo fue técnica, funcional y editorial. No hubo revisión clínica externa; las pausas, duraciones y ejercicios ficticios no están clínicamente validados.
+
+**Voces y control contextual**
+
+- Chrome y Edge seleccionaron una voz española disponible. No se proporcionaron nombres, `voiceURI` o inventarios concretos de voces, por lo que no se afirma que ambos navegadores usaran la misma voz.
+- No se observaron diferencias funcionales entre Chrome y Edge: ambos completaron el recorrido y aplicaron la misma semántica escuchar/detener sin errores. La voz concreta y su disponibilidad pueden variar según navegador y sistema operativo.
+- No existió autoplay. “Escuchar instrucción” cambió a “Detener voz” durante la locución y volvió al finalizar o detener; el mismo comportamiento fue aprobado para “Escuchar devolución”.
+- “Repetir instrucción” y “Repetir devolución” no aparecieron. Una nueva pulsación explícita de “Escuchar” reprodujo nuevamente el contenido, mientras “Repetir este intento” permaneció como acción distinta del flujo.
+- Volver a escuchar no cambió el estado del intento, no modificó `attemptId` y no ejecutó nuevamente `evaluateCoach`. Los clics rápidos no produjeron locuciones superpuestas y no se movió el foco al iniciar, finalizar o detener.
+
+**Cancelación, privacidad y accesibilidad**
+
+- La voz se canceló antes de activar el micrófono y al repetir el intento, descartar o continuar. Iniciar otra acción no dejó síntesis superpuesta con la captura.
+- Instrucción y devolución conservaron texto visible equivalente. Rimay no sintetizó texto reconocido, manual o demo, métricas, evidencias, IDs o información del intento.
+- Demo continuó sin micrófono. Navegación por teclado, foco, zoom 200 % y reflow fueron aprobados en ambos navegadores.
+- Console no mostró errores. Network confirmó que Rimay no realizó solicitudes propias para síntesis. Storage no conservó voces, textos o preferencias.
+- Algunas voces pueden usar infraestructura administrada por el navegador; Rimay no promete que toda voz sea local u offline.
+
+**Cierre:** el incremento 6 queda completado con dictamen `APTO PARA CERRAR`. La validación fue técnica, funcional y editorial, no clínica; no hubo revisión clínica o profesional externa y no se inició el incremento 7.
 
 ## Decisiones confirmadas
 
@@ -520,7 +580,7 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 | --- | --- | --- |
 | D-001 | El MVP usa un selector local paciente/profesional sin login. | La revisión ocurre en el mismo navegador y no representa un modelo de acceso clínico. |
 | D-002 | El audio es estrictamente temporal. | El `Blob` puede reproducirse y analizarse localmente, pero Rimay no lo envía ni lo guarda. La vista profesional no tiene audio histórico. |
-| D-003 | La voz de salida usa `SpeechSynthesis`. | Evita claves, costo y latencia. Siempre hay texto visible y controles para escuchar, detener y repetir. |
+| D-003 | La voz de salida usa `SpeechSynthesis`. | Evita claves, costo y latencia. Siempre hay texto visible; un control contextual permite escuchar o detener y volver a escuchar mediante una nueva acción explícita. |
 | D-004 | El modo demo usa `DemoSpeechRecognizer`. | Completa el recorrido sin red ni secretos mediante fixtures deterministas y declara que no analizó el audio. |
 | D-005 | El reconocimiento automático es opcional. | `BrowserSpeechRecognizer` se usa sólo tras aviso y elección; la entrada manual está disponible desde el inicio y como recuperación. |
 | D-006 | Rimay no envía el `Blob`. | `BrowserSpeechRecognizer` escucha mediante la API del navegador en paralelo; no recibe el archivo de `MediaRecorder`. |

@@ -1,29 +1,32 @@
 import { useEffect, useRef } from 'react';
 
+import {
+  INITIAL_EXERCISE_SEQUENCE,
+  getInitialSequencePosition,
+} from '../../domain/exercises';
 import { AudioMetricsSummary } from '../audio-analysis/AudioMetricsSummary';
 import { TextMetricsSummary } from '../speech-recognition';
-import { CoachFeedback } from './CoachFeedback';
 import {
-  TEMPORARY_PRACTICE_FIXTURE_LABEL,
-} from './practiceFixture';
+  useSpeechOutput,
+  type BrowserSpeechOutput,
+  type SpeechOutputController,
+} from '../speech-output';
+import { CoachFeedback } from './CoachFeedback';
+import { ExerciseInstruction } from './ExerciseInstruction';
 import {
   usePracticeAttempt,
   type PracticeAttemptController,
   type UsePracticeAttemptOptions,
 } from './usePracticeAttempt';
 
-type PracticeAttemptFlowProps = UsePracticeAttemptOptions;
+interface PracticeAttemptFlowProps extends UsePracticeAttemptOptions {
+  readonly speechOutput?: BrowserSpeechOutput | undefined;
+}
 
 const MODE_LABELS = {
   browser: 'Reconocimiento del navegador',
   manual: 'Entrada manual',
   demo: 'Demostración con datos simulados',
-} as const;
-
-const EXERCISE_TYPE_LABELS = {
-  word_repetition: 'Repetición de palabra',
-  phrase_repetition: 'Repetición de frase',
-  guided_reading: 'Lectura guiada',
 } as const;
 
 const FLOW_STATUS_MESSAGES = {
@@ -41,7 +44,12 @@ const FLOW_STATUS_MESSAGES = {
 } as const;
 
 export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
-  const controller = usePracticeAttempt(props);
+  const { speechOutput, ...practiceOptions } = props;
+  const speech = useSpeechOutput({ output: speechOutput });
+  const controller = usePracticeAttempt({
+    ...practiceOptions,
+    stopSpeech: speech.stop,
+  });
   const feedbackFocusRef = useRef<HTMLDivElement>(null);
   const errorFocusRef = useRef<HTMLDivElement>(null);
   const previewFocusRef = useRef<HTMLDivElement>(null);
@@ -88,7 +96,7 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
           cerrar la página.
         </p>
         <p className="mt-2 text-sm font-semibold text-slate-600">
-          {TEMPORARY_PRACTICE_FIXTURE_LABEL}; no es una biblioteca definitiva.
+          Catálogo local ficticio del MVP; no contiene datos clínicos.
         </p>
 
         <div
@@ -101,7 +109,7 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
           {FLOW_STATUS_MESSAGES[controller.state.status]}
         </div>
 
-        <FlowBody controller={controller} />
+        <FlowBody controller={controller} speech={speech} />
       </div>
 
       {controller.state.status === 'decision_ready' && (
@@ -109,6 +117,7 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
           <CoachFeedback
             onContinue={controller.continueToPreview}
             onRepeat={controller.repeatAttempt}
+            speech={speech}
             state={controller.state}
           />
           <TechnicalResults controller={controller} />
@@ -177,28 +186,18 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
           >
             Siguiente ejercicio
           </h2>
-          <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-            <PreviewItem
-              label="Tipo"
-              value={
-                EXERCISE_TYPE_LABELS[
-                  controller.state.selectedExercise.type
-                ]
+          <div className="mt-5">
+            <ExerciseInstruction
+              exercise={controller.state.selectedExercise}
+              position={
+                getInitialSequencePosition(
+                  controller.state.selectedExercise.id,
+                ) ?? 1
               }
+              speech={speech}
+              total={INITIAL_EXERCISE_SEQUENCE.length}
             />
-            <PreviewItem
-              label="Dificultad"
-              value={`Nivel ${controller.state.selectedExercise.difficulty}`}
-            />
-            <PreviewItem
-              label="Instrucción"
-              value={controller.state.selectedExercise.instruction}
-            />
-            <PreviewItem
-              label="Texto objetivo"
-              value={controller.state.selectedExercise.targetText}
-            />
-          </dl>
+          </div>
           <p className="mt-5 text-sm font-semibold leading-6 text-sky-950">
             Esta vista previa no inicia otra grabación, no crea un segundo
             intento y no vuelve a ejecutar las reglas.
@@ -211,20 +210,22 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
 
 function FlowBody({
   controller,
+  speech,
 }: {
   readonly controller: PracticeAttemptController;
+  readonly speech: SpeechOutputController;
 }) {
   const { state } = controller;
 
   if (state.status === 'instruction') {
     return (
       <div className="mt-6">
-        <p className="text-lg font-semibold text-slate-950">
-          {state.currentExercise.instruction}
-        </p>
-        <p className="mt-3 rounded-2xl border border-rimay-100 bg-rimay-50 px-5 py-4 text-3xl font-bold text-rimay-900">
-          {state.currentExercise.targetText}
-        </p>
+        <ExerciseInstruction
+          exercise={state.currentExercise}
+          position={getInitialSequencePosition(state.currentExercise.id) ?? 1}
+          speech={speech}
+          total={INITIAL_EXERCISE_SEQUENCE.length}
+        />
         <button
           className="mt-6 min-h-11 rounded-xl bg-rimay-700 px-5 py-3 font-semibold text-white hover:bg-rimay-900"
           onClick={() => controller.chooseMode('manual')}
@@ -671,19 +672,5 @@ function ModeOption({
         </span>
       </span>
     </label>
-  );
-}
-
-interface PreviewItemProps {
-  readonly label: string;
-  readonly value: string;
-}
-
-function PreviewItem({ label, value }: PreviewItemProps) {
-  return (
-    <div className="rounded-xl bg-white px-4 py-3 shadow-sm">
-      <dt className="text-sm font-semibold text-slate-600">{label}</dt>
-      <dd className="mt-1 font-bold text-slate-950">{value}</dd>
-    </div>
   );
 }
