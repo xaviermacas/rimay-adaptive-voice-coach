@@ -425,6 +425,69 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 - Límite de 10 MB: no cambia en el incremento 5. Una captura descartada debe conducir a una recuperación clara y respetuosa. Revisar conservación de reproducción o política del límite queda registrado para el incremento 10.
 - División: un solo incremento formal con tramo A de fixture, contratos, estado, input, evaluación, errores y pruebas del controlador; y tramo B de React, feedback, evidencia, acciones, limpieza, integración y validación Chrome/Edge. No se autorizan commits parciales mediante esta resolución.
 
+## Implementación automática del incremento 5
+
+- Fecha: 2026-07-19.
+- Estado: tramos A y B implementados y verificados automáticamente; la validación manual técnica y funcional posterior se completó correctamente en Chrome y Edge. El cierre final se registra a continuación y no se inició el incremento 6.
+- Arquitectura: `src/features/practice/` separa fixture y contratos efímeros, transición pura de estados, errores seguros, resolución pura de evidencia, controlador de aplicación y presentación React. `PracticeAttemptFlow` sustituyó a `AudioRecorderCard` como único recorrido principal de `App`; la tarjeta técnica anterior y sus pruebas se conservan como arnés de regresión no accesible desde la aplicación principal.
+- Compatibilidad de nombres: el componente visual usa `CoachEvidenceView.tsx` porque Windows no permite coexistir `coachEvidence.ts` y `CoachEvidence.tsx` en el mismo directorio sin colisión de mayúsculas; la función pura permanece en `coachEvidence.ts`.
+- Máquina de estados: la fase principal es la unión discriminada documentada con `instruction`, `privacy_choice`, `requesting_permission`, `recording`, `recorded`, `awaiting_text`, `ready_to_analyze`, `analyzing`, `decision_ready`, `recoverable_error` y `selection_preview`. Los eventos inválidos conservan el estado existente.
+- Fixture temporal: la palabra actual es “casa”, tipo `word_repetition`, dificultad 1; el catálogo añade la frase “Camino con calma.”, tipo `phrase_repetition`, dificultad 2. Ambos usan IDs constantes, contratos `Exercise` completos y ninguna fecha, UUID o aleatoriedad. El fixture demo usa `audio-metrics-v1`, texto final `source: 'demo'`, `text-metrics-v1` local y WPM no disponible.
+- Identidad y concurrencia: los IDs `practice-attempt-N` proceden de un contador monotónico local y la generación invalida análisis y eventos tardíos al descartar, repetir, continuar o desmontar. Un guard síncrono bloquea doble análisis.
+- Construcción del dominio: browser y manual requieren `DeterministicMetrics` reales del `Blob`; demo usa el fixture acústico simulado. `buildPracticeCoachInput` fija contador anterior `0`, cobertura anterior `[]`, dificultad del ejercicio y catálogo temporal. Browser sin final explícitamente aceptado produce `textSource: null` y `textMetrics: null`.
+- Evaluación única y snapshot: `evaluateCoach` sólo aparece en el manejador explícito `analyzeAttempt`, después de métricas acústicas y textuales; no se ejecuta en render o efectos. `decision_ready` conserva `CoachInput`, `CoachResult`, ejercicio, procedencia y catálogo sin recalcular la decisión.
+- Browser: el aviso previo exige consentimiento, `MediaRecorder` y el reconocedor se inician desde la misma acción, el provisional sólo se muestra y un final es el único texto automático elegible. Un fallo del reconocedor conserva audio y ofrece entrada manual o continuación explícita sin texto.
+- Manual: requiere grabación real y confirmación de texto no vacío antes de habilitar análisis. La UI conserva `source: 'manual'`, permite editar antes de analizar y declara que Rimay no verificó el texto contra el audio. Sin captura no se construye `CoachInput` ni se ejecuta coaching.
+- Demo: “Cargar datos simulados” no llama `getUserMedia`, `MediaRecorder`, `SpeechRecognition` ni Web Audio. La UI muestra literalmente los tres avisos de simulación, identifica el fixture acústico y evita atribuirlo a la voz del usuario.
+- Feedback y evidencia: la vista presenta mensaje, explicación, foco traducido, acción, versión, procedencia, aviso no clínico y sólo las evidencias declaradas por la decisión. El resolvedor cubre `qualityFlags`, `silenceRatio`, `validAttemptCountBeforeCurrent`, `pauseCount`, `pauseCues`, `totalDurationMs`, `expectedMaxDurationMs`, `textSimilarity` y `currentDifficulty`; una clave no compatible falla explícitamente.
+- Acciones y errores: `repeat_current` sólo ofrece “Repetir este intento”; `continue` valida que el ID pertenezca al catálogo y termina en preview. `complete_session` produce `unexpected_coach_action`; un ID ausente produce `selected_exercise_not_found`; ningún error muestra feedback parcial. Los `CoachErrorCode` se mapean exhaustivamente mediante un `Record` tipado.
+- Limpieza: `useAudioRecorder.reset` ahora invalida solicitudes anteriores, desactiva callbacks, detiene grabador y pistas, borra chunks y revoca la URL una vez. El controlador reinicia reconocimiento, texto, reproducción, análisis, snapshot y decisión; pruebas con promesas controladas confirman que un resultado tardío o posterior al desmontaje no ejecuta coaching.
+- Accesibilidad: todos los controles son nativos y operables por teclado, tienen foco visible y altura mínima; el estado principal usa `aria-live` sin incluir provisionales. Tras analizar, fallar o continuar, el foco se dirige respectivamente a devolución, error o preview. No existe inicio o avance automático y `prefers-reduced-motion` permanece activo.
+- Pruebas del tramo A: el corte previo a React terminó con `npm.cmd run typecheck` en código 0 y 4 archivos/11 pruebas de práctica aprobadas.
+- Pruebas del tramo B: las pruebas de integración cubren demo sin APIs de captura, manual con audio y texto, WPM elegible, consentimiento browser, provisional/final, fallo browser sin texto, acciones explícitas, foco, errores, descarte durante análisis, URL revocada y desmontaje seguro. Las regresiones dirigidas de grabación y reconocimiento aprobaron 4 archivos/38 pruebas.
+- Verificación automática preliminar: `npm.cmd run lint`, código 0; `npm.cmd run typecheck`, código 0; `npm.cmd test`, 22 archivos y 251/251 pruebas; `npm.cmd run build`, código 0 y 54 módulos transformados. La verificación final se repetirá después de esta actualización documental.
+- Verificación automática final posterior a documentación: `npm.cmd run lint`, código 0; `npm.cmd run typecheck`, código 0; `npm.cmd test -- practice`, 5 archivos y 20/20 pruebas; regresiones dirigidas de App, grabación y reconocimiento, 5 archivos y 39/39 pruebas; `npm.cmd test`, 22 archivos y 251/251; `npm.cmd run build`, 54 módulos transformados; `git diff --check`, código 0 sin errores de whitespace.
+- Dependencias y exclusiones: `package.json` y `package-lock.json` no cambiaron. No se añadieron dependencias, persistencia, sesión, historial, `SpeechSynthesis`, resumen, vista profesional, backend, Supabase, OpenAI ni red propia.
+- Limitaciones: sólo existe un intento actual de palabra; continuar muestra una vista previa y no activa otro ejercicio. `SpeechRecognition` depende de la capacidad del navegador y puede utilizar servicios remotos propios fuera del control de Rimay. Las métricas y reglas son técnicas, no clínicamente validadas y no constituyen diagnóstico ni recomendación terapéutica.
+
+## Validación manual final y cierre del incremento 5
+
+- Fecha: 2026-07-19.
+- Dictamen: `APTO PARA CERRAR`.
+- Estado: validación técnica y funcional completada correctamente por el responsable en Chrome y Edge, sin errores observados ni defectos materiales pendientes. El incremento 5 queda completado; no se inició el incremento 6.
+- Alcance de la revisión: recorridos browser, manual y demo; consentimiento y procedencia; grabación, reproducción y métricas; decisiones y snapshot; repetición, continuación y limpieza; Console, Network y Storage; teclado, foco, zoom al 200 % y reflow. No se realizó revisión clínica externa.
+
+**Browser**
+
+- El recorrido completo fue aprobado con consentimiento de privacidad obligatorio, captura local, reproducción y métricas acústicas.
+- El texto provisional permaneció sólo como información visible y no se utilizó como resultado final. El reconocimiento final y las métricas textuales fueron aprobados.
+- El análisis sin texto fue aprobado con ausencia explícita de métricas textuales. Un fallo de reconocimiento conservó la captura y permitió cambiar a entrada manual.
+- La interfaz mantuvo el aviso de que `SpeechRecognition` puede utilizar servicios remotos propios del navegador. Rimay no promete reconocimiento local u offline y no envía el `Blob` a ese servicio.
+
+**Manual y demo**
+
+- Manual con audio real fue aprobado y mostró la advertencia de que el texto fue introducido por el usuario y no se verificó contra la grabación. Sin captura no se construyó `CoachInput` ni se ejecutó coaching.
+- Demo utilizó exclusivamente fixtures locales simulados. No solicitó micrófono, no creó una captura con `MediaRecorder`, no inició `SpeechRecognition`, no usó `Blob` del usuario y no realizó solicitudes de red.
+- Los avisos “Este recorrido utiliza datos simulados.”, “No se grabó ni analizó su voz.” y “El texto simulado no procede de audio.” aparecieron correctamente.
+
+**Decisiones, acciones y recursos**
+
+- Una captura silenciosa produjo `repeat_current`. “Repetir este intento” requirió clic explícito, limpió el estado y no inició automáticamente otra grabación.
+- `continue` requirió clic explícito, limpió los recursos y terminó en `selection_preview` para “Camino con calma.”. No inició una segunda captura, otra evaluación, una sesión o historial.
+- Feedback, explicación, foco, procedencia y evidencia se mostraron correctamente. No se observaron decisiones duplicadas y cada decisión permaneció asociada al snapshot original del intento.
+- El micrófono se liberó al detener, descartar, repetir y continuar.
+
+**Privacidad, accesibilidad y límites**
+
+- Console permaneció sin errores. Network confirmó que Rimay no realizó solicitudes propias para enviar audio, texto, métricas o decisiones.
+- Local Storage, Session Storage e IndexedDB no recibieron datos nuevos durante el recorrido.
+- Navegación por teclado, foco, zoom al 200 % y reflow fueron aprobados en Chrome y Edge.
+- La validación fue técnica y funcional, no clínica. No hubo revisión clínica o profesional externa. El flujo es una demostración técnica no clínicamente validada y no diagnostica ni recomienda tratamiento.
+- Dependencias y alcance: `package.json` y `package-lock.json` permanecieron intactos. No se añadieron `SpeechSynthesis`, sesión, historial, persistencia, vista profesional, backend, Supabase, OpenAI o código del incremento 6.
+- Git: el cierre se versiona localmente con el mensaje `feat: add single-attempt practice flow`; no se hace push ni se configuran remotos.
+
+**Cierre:** el incremento 5 queda completado con dictamen `APTO PARA CERRAR`. No se inició el incremento 6.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |

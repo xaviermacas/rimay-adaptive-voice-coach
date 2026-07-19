@@ -59,6 +59,7 @@ export function useAudioRecorder(): AudioRecorderController {
   const audioUrlRef = useRef<string | null>(null);
   const terminalErrorRef = useRef<RecordingErrorCode | null>(null);
   const operationActiveRef = useRef(false);
+  const operationIdRef = useRef(0);
   const mountedRef = useRef(true);
 
   const clearDurationTimer = useCallback(() => {
@@ -133,6 +134,8 @@ export function useAudioRecorder(): AudioRecorderController {
     }
 
     operationActiveRef.current = true;
+    const operationId = operationIdRef.current + 1;
+    operationIdRef.current = operationId;
     terminalErrorRef.current = null;
     chunksRef.current = [];
     totalBytesRef.current = 0;
@@ -171,11 +174,22 @@ export function useAudioRecorder(): AudioRecorderController {
               return;
             }
 
+            if (operationIdRef.current !== operationId) {
+              stopAllTracks(requestedStream);
+              reject(new DOMException('Recording request is stale', 'AbortError'));
+              return;
+            }
+
             clearPermissionTimer();
             resolve(requestedStream);
           },
           (requestError: unknown) => {
             if (requestTimedOut) {
+              return;
+            }
+
+            if (operationIdRef.current !== operationId) {
+              reject(requestError);
               return;
             }
 
@@ -185,9 +199,11 @@ export function useAudioRecorder(): AudioRecorderController {
         );
       });
 
-      if (!mountedRef.current) {
+      if (
+        !mountedRef.current ||
+        operationIdRef.current !== operationId
+      ) {
         stopAllTracks(stream);
-        operationActiveRef.current = false;
         return;
       }
 
@@ -285,6 +301,9 @@ export function useAudioRecorder(): AudioRecorderController {
         MAX_RECORDING_DURATION_MS,
       );
     } catch (captureError) {
+      if (operationIdRef.current !== operationId) {
+        return;
+      }
       releaseCapture();
       presentError(mapCaptureError(captureError));
     }
@@ -298,18 +317,40 @@ export function useAudioRecorder(): AudioRecorderController {
   ]);
 
   const reset = useCallback(() => {
+    operationIdRef.current += 1;
+    terminalErrorRef.current = null;
+    chunksRef.current = [];
+    totalBytesRef.current = 0;
+
+    const recorder = recorderRef.current;
+    if (recorder !== null) {
+      recorder.ondataavailable = null;
+      recorder.onerror = null;
+      recorder.onstop = null;
+
+      if (recorder.state !== 'inactive') {
+        try {
+          recorder.stop();
+        } catch {
+          // Reset still releases the stream and clears local state.
+        }
+      }
+    }
+
+    releaseCapture();
     revokeAudioUrl();
     setRecordedAudio(null);
     setError(null);
     setActiveMimeType(null);
     setStatus('idle');
-  }, [revokeAudioUrl]);
+  }, [releaseCapture, revokeAudioUrl]);
 
   useEffect(() => {
     mountedRef.current = true;
 
     return () => {
       mountedRef.current = false;
+      operationIdRef.current += 1;
       clearDurationTimer();
       clearPermissionTimer();
 

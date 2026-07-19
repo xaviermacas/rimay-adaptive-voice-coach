@@ -6,6 +6,7 @@ import type {
 interface AudioMetricsSummaryProps {
   readonly hasUsableText?: boolean;
   readonly metrics: DeterministicMetrics;
+  readonly simulated?: boolean;
 }
 
 const FLAG_LABELS: Readonly<Record<AudioQualityFlag, string>> = {
@@ -41,6 +42,7 @@ function formatPauses(metrics: DeterministicMetrics): string {
 export function AudioMetricsSummary({
   hasUsableText = false,
   metrics,
+  simulated = false,
 }: AudioMetricsSummaryProps) {
   const captureFlags = metrics.qualityFlags.filter(
     (flag) => flag !== 'transcription_missing',
@@ -56,7 +58,9 @@ export function AudioMetricsSummary({
     >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
         <h3 id="audio-metrics-title" className="text-lg font-bold">
-          Resumen técnico de la captura
+          {simulated
+            ? 'Resumen técnico del fixture acústico simulado'
+            : 'Resumen técnico de la captura'}
         </h3>
         <p className="text-sm font-semibold text-sky-900">
           Algoritmo: {metrics.algorithmVersion}
@@ -106,8 +110,9 @@ export function AudioMetricsSummary({
       )}
 
       <p className="mt-5 border-t border-sky-200 pt-4 text-sm font-semibold leading-6 text-sky-950">
-        Estas métricas son técnicas y experimentales. No representan una
-        evaluación clínica.
+        {simulated
+          ? 'Estas métricas pertenecen a datos simulados y no representan una medición de su voz ni una evaluación clínica.'
+          : 'Estas métricas son técnicas y experimentales. No representan una evaluación clínica.'}
       </p>
     </section>
   );

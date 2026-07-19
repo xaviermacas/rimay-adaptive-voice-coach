@@ -294,7 +294,7 @@ Ejecutar fixtures de cada rama, límites exactos, frontera del quinto intento, c
 
 ## Incremento 5 — Recorrido vertical de un intento
 
-**Estado: PLANIFICADO — NO INICIADO**
+**Estado: COMPLETADO — 2026-07-19**
 
 **Objetivo**
 
@@ -385,6 +385,40 @@ Recorrer demo sin red, browser y manual; inspeccionar red, consola y almacenamie
 - Tramo A: fixture temporal, contratos de aplicación, máquina de estados, construcción de `CoachInput`, evaluación única, errores y pruebas del controlador.
 - Tramo B: composición React, feedback, evidencia, acciones explícitas, limpieza, pruebas de integración y validación Chrome/Edge.
 - Ambos tramos pertenecen al mismo incremento formal. No se crean commits parciales salvo autorización posterior y el incremento no se considera aceptado hasta completar ambos.
+
+**Resultado automático observado**
+
+- [x] Tramo A: fixture temporal, contratos de aplicación, unión discriminada, identidad monotónica, generación, errores, construcción de `CoachInput`, resolución exhaustiva de evidencia y controlador implementados.
+- [x] Corte obligatorio del tramo A: `npm.cmd run typecheck` terminó con código 0 y `npm.cmd test -- practice` aprobó inicialmente 4 archivos y 11 pruebas antes de iniciar React.
+- [x] Tramo B: `PracticeAttemptFlow` es el único recorrido principal de `App`; integra browser, manual y demo, feedback escrito, evidencia traducida, reproducción local, acciones explícitas, preview, foco y errores recuperables.
+- [x] Demo carga `DeterministicMetrics` y `SpeechTextResult` locales sin llamar micrófono, `MediaRecorder`, `SpeechRecognition`, analizador Web Audio o red; WPM permanece `null`.
+- [x] Browser exige consentimiento, no usa provisionales para métricas y conserva la captura ante ausencia de texto final; manual exige captura y texto confirmado para coaching.
+- [x] `evaluateCoach` se invoca únicamente desde el manejador de “Analizar intento”; doble activación, resultados tardíos y resoluciones tras desmontar quedan invalidados.
+- [x] `repeat_current` y `continue` esperan clic; repetir crea otro ID sin iniciar captura y continuar valida el catálogo, limpia recursos y termina en preview sin segundo intento.
+- [x] `complete_session` inesperado y selección inválida producen errores recuperables sin feedback parcial.
+- [x] La limpieza central revoca URL, libera `Blob`, pistas y reconocimiento, borra estado temporal e invalida trabajos pendientes al repetir, descartar, continuar o desmontar.
+- [x] Verificación automática preliminar: lint y typecheck con código 0; suite completa con 22 archivos y 251/251 pruebas; build estático con 54 módulos transformados.
+- [x] Verificación automática final posterior a documentación: lint y typecheck con código 0; práctica 5 archivos y 20/20 pruebas; regresiones dirigidas de App, grabación y reconocimiento 5 archivos y 39/39 pruebas; suite completa 22 archivos y 251/251; build con 54 módulos transformados; `git diff --check` sin errores.
+- [x] `package.json` y `package-lock.json` permanecen sin cambios; no se añadieron dependencias, persistencia, Supabase, OpenAI, backend ni voz de salida.
+- [x] Validación manual técnica y funcional completada correctamente en Chrome y Edge: rutas browser/manual/demo, captura silenciosa, reproducción, limpieza, Console, Network, Storage, teclado, foco, zoom 200 % y reflow; no se observaron errores.
+
+**Evidencia de validación manual final — 2026-07-19**
+
+- [x] Chrome y Edge aprobaron el recorrido browser completo con consentimiento obligatorio, grabación y reproducción locales, métricas acústicas, resultado final y métricas textuales. El provisional permaneció sólo visible y nunca se evaluó como final.
+- [x] Browser sin texto produjo `textSource: null` y `textMetrics: null`. Un fallo de reconocimiento conservó la captura y permitió cambiar a entrada manual.
+- [x] Se mantuvo visible que `SpeechRecognition` puede utilizar servicios remotos propios del navegador. La inspección de Network confirmó que Rimay no realizó solicitudes propias para enviar audio, texto, métricas o decisiones.
+- [x] Manual con audio real produjo coaching y mostró que el texto fue introducido por el usuario y no se verificó contra la grabación. Manual sin captura no construyó `CoachInput` ni ejecutó coaching.
+- [x] Demo utilizó únicamente fixtures locales simulados: no solicitó micrófono ni usó `MediaRecorder`, `SpeechRecognition`, `Blob` del usuario o red; los tres avisos de simulación aparecieron correctamente.
+- [x] Una captura silenciosa produjo `repeat_current`. “Repetir este intento” exigió clic, limpió el estado y no inició automáticamente otra grabación.
+- [x] `continue` exigió clic, limpió los recursos y terminó en `selection_preview` para “Camino con calma.” sin segunda captura, sesión o nueva evaluación.
+- [x] Feedback, explicación, foco, procedencia y evidencia coincidieron con el snapshot original; no se observaron decisiones duplicadas.
+- [x] El micrófono se liberó al detener, descartar, repetir y continuar. Consola quedó sin errores y Local Storage, Session Storage e IndexedDB permanecieron sin datos nuevos.
+- [x] Navegación por teclado, foco dirigido, zoom al 200 % y reflow fueron aprobados en ambos navegadores.
+- [x] La validación fue técnica y funcional. No hubo revisión clínica externa; el recorrido, las métricas y las reglas son una demostración técnica no clínicamente validada.
+
+**Condición de cierre**
+
+**Cierre:** el responsable confirmó la validación manual técnica y funcional final. El incremento 5 queda completado sin defectos materiales pendientes. No hubo revisión clínica externa y el incremento 6 no se inició.
 
 ## Incremento 6 — Tres ejercicios y voz accesible
 

@@ -1,4 +1,4 @@
-import { AudioRecorderCard } from '../features/recording/AudioRecorderCard';
+import { PracticeAttemptFlow } from '../features/practice';
 
 export function App() {
   return (
@@ -21,18 +21,21 @@ export function App() {
 
       <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
         <div className="max-w-4xl">
-          <p className="text-sm font-semibold text-rimay-700">Incremento técnico 3</p>
+          <p className="text-sm font-semibold text-rimay-700">
+            Incremento 5 · Recorrido vertical de un intento
+          </p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
-            Comprueba tu micrófono con tranquilidad
+            Practica una palabra a tu ritmo
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-700">
-            Este prototipo demuestra captura, texto opcional y métricas técnicas
-            calculadas localmente. No diagnostica ni evalúa clínicamente la voz.
+            Elige una ruta de captura, revisa las métricas técnicas del intento y
+            recibe una devolución local basada en reglas. No diagnostica ni
+            evalúa clínicamente la voz.
           </p>
         </div>
 
         <div className="mt-8">
-          <AudioRecorderCard />
+          <PracticeAttemptFlow />
         </div>
 
         <aside
