@@ -404,6 +404,27 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 - Limitaciones: el filtro léxico automatizado reduce el riesgo editorial, pero no sustituye revisión profesional. Los umbrales acústicos, textuales y adaptativos son reglas deterministas de interacción para la demostración y no están clínicamente validados; no diagnostican, clasifican severidad, pronostican ni prescriben tratamiento.
 - Cierre de alcance: no se modificaron plantillas, contratos, reglas, prioridades, fórmulas o umbrales durante el cierre. No se añadieron React, recorrido de práctica, `SpeechSynthesis`, persistencia, backend, Supabase u OpenAI. No se hizo push ni se configuraron remotos.
 
+## Resolución documental previa al incremento 5
+
+- Fecha: 2026-07-18.
+- Estado: bloqueos documentales previos al incremento 5 resueltos. La tarea fue exclusivamente documental; no se escribió código, no se modificaron dependencias, no se creó commit y el incremento 5 permanece sin iniciar.
+- Estado base: incrementos 1–4 completados; rama `main`; último commit confirmado `b8a78fb feat: add deterministic coaching and adaptation rules`.
+- Corte funcional: el incremento 5 integra exactamente un intento actual de palabra hasta feedback escrito y acción explícita. No inicia una segunda captura después de continuar ni implementa sesión, historial, biblioteca final, voz, persistencia, vista profesional o resumen.
+- Browser: requiere una grabación real local; `SpeechRecognition` puede ejecutarse en paralelo tras aviso y autorización. Un provisional nunca se evalúa. Si falta un final, el usuario puede aportar texto manual o continuar explícitamente sin texto, con ambos campos textuales de `CoachInput` en `null`.
+- Manual: requiere grabación real y `audio-metrics-v1` satisfactorio para ejecutar coaching. El texto se declara por el usuario y no se verifica contra el audio. La comparación manual sin captura puede continuar como capacidad técnica, pero no construye `CoachInput`.
+- Demo: conserva la garantía de no solicitar micrófono. Usa un fixture local determinista de `DeterministicMetrics` con versión `audio-metrics-v1`, texto demo predefinido y `text-metrics-v1` local; no usa audio del usuario, `Blob` de usuario, red o WPM. La UI declara que el recorrido y el texto son simulados y que no grabó ni analizó la voz.
+- Catálogo: el fixture temporal contiene una palabra actual y al menos una frase permitida, usa `Exercise`, vive fuera de React y no representa la biblioteca final. Permite que el primer intento válido seleccione una frase autorizada.
+- Continuación: `continue` exige clic, valida el ID seleccionado, limpia recursos y termina en preview. No inicia grabación, no activa sesión, no incrementa contadores y no vuelve a ejecutar el motor.
+- Repetición: `repeat_current` exige clic, limpia audio, URL, texto, métricas, errores y decisión, conserva el ejercicio y vuelve al inicio sin acción automática. Continuar pese a la recomendación permanece en el incremento 7.
+- Finalización inesperada: con contador anterior `0`, `complete_session` es inalcanzable. Si aparece, la aplicación devuelve `unexpected_coach_action`, mantiene recuperación y no fabrica sesión, resumen o selección.
+- Identidad: `attemptId` usa contador monotónico local sin fecha, UUID o aleatoriedad. Permanece estable durante el intento y se renueva al repetir, descartar o iniciar uno nuevo.
+- Concurrencia: un token de generación invalida resultados tardíos; un doble clic en análisis se ignora; `evaluateCoach` se llama una sola vez desde “Analizar intento” y no desde efectos. Input y decisión permanecen como snapshot hasta repetir o continuar.
+- Estados: la fase principal se representa mediante una unión discriminada con `instruction`, `privacy_choice`, `requesting_permission`, `recording`, `recorded`, `awaiting_text`, `ready_to_analyze`, `analyzing`, `decision_ready`, `recoverable_error` y `selection_preview`.
+- Contratos permitidos: `PracticeAttemptState`, `PracticeAttemptError` y `CoachEvidenceViewItem`. No se autorizan todavía contratos de intento persistido, sesión, historial, repositorio, resumen o síntesis de voz.
+- Evidencia: cada clave se resuelve contra el snapshot real y se presenta con etiqueta, valor y unidad, junto con mensaje, explicación, foco, acción, versión, procedencia y advertencia no clínica. No se muestran claves internas crudas ni se atribuye manual/demo al audio.
+- Límite de 10 MB: no cambia en el incremento 5. Una captura descartada debe conducir a una recuperación clara y respetuosa. Revisar conservación de reproducción o política del límite queda registrado para el incremento 10.
+- División: un solo incremento formal con tramo A de fixture, contratos, estado, input, evaluación, errores y pruebas del controlador; y tramo B de React, feedback, evidencia, acciones, limpieza, integración y validación Chrome/Edge. No se autorizan commits parciales mediante esta resolución.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |
@@ -431,6 +452,12 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 | D-021 | El motor devuelve una unión tipada. | `CoachResult` separa decisiones completas de errores esperables y evita fallbacks o IDs inventados. |
 | D-022 | `repeat_current` es sólo una recomendación. | No contiene ejercicio alternativo ni inicia acciones; continuar pese a ella se integra en el incremento 7 sin contar el intento defectuoso. |
 | D-023 | La selección de candidatos tiene orden total versionado. | Ordena copias por cobertura, distancia, ID actual, tipo, dificultad e ID ordinal, sin mutar `allowedExercises` ni usar `localeCompare`. |
+| D-024 | El incremento 5 es un único recorrido de palabra. | Termina tras feedback escrito y acción explícita; una segunda captura y la sesión pertenecen a incrementos posteriores. |
+| D-025 | Demo integra fixtures y no solicita micrófono. | Usa métricas acústicas y texto simulados, locales y versionados; no captura voz, no usa red, no produce WPM y declara su procedencia. |
+| D-026 | `continue` termina en una vista previa. | Valida la selección y limpia recursos sin iniciar otra grabación, sesión, contador o evaluación. |
+| D-027 | La aplicación falla de forma segura ante acciones inesperadas. | `complete_session` con contador anterior cero produce `unexpected_coach_action`; una selección ajena al catálogo también es un error tipado. |
+| D-028 | Un intento tiene identidad monotónica y evaluación única. | El ID no usa reloj ni aleatoriedad; la generación invalida resultados tardíos y el motor se llama una sola vez desde la acción explícita. |
+| D-029 | El límite de 10 MB no cambia en el incremento 5. | La recuperación debe ser clara; revisar la conservación de reproducción o la política queda para el incremento 10. |
 
 Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan sustituidas por D-004 a D-018 desde esta pausa documental.
 

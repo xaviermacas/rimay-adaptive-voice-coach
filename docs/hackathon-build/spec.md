@@ -2,9 +2,9 @@
 
 ## 1. Estado y alcance de esta especificación
 
-Esta especificación define la arquitectura objetivo del MVP después de completar los incrementos 1 y 2. La revisión actual es exclusivamente documental y reemplaza, antes del incremento 3, la arquitectura anterior basada en Supabase y OpenAI por una arquitectura runtime local de costo USD 0.
+Esta especificación define la arquitectura objetivo del MVP. Los incrementos 1, 2, 3 y 4 están completados; el último commit confirmado es `b8a78fb feat: add deterministic coaching and adaptation rules`. El incremento 5 — Recorrido vertical de un intento es el siguiente incremento planificado y todavía no se ha iniciado.
 
-No se autoriza implementación mediante esta revisión. El nuevo incremento 3 requiere autorización expresa independiente.
+La revisión actual es exclusivamente documental y resuelve los contratos de integración previos al incremento 5. No autoriza código, dependencias, servicios, commit ni el inicio del incremento 5; su implementación requiere una autorización explícita posterior.
 
 Palabras normativas:
 
@@ -429,6 +429,107 @@ Las recapturas descartadas y los errores técnicos nunca se convierten en `Attem
 
 En `Session`, la cantidad de intentos válidos terminados se deriva de `attemptIds.length`; no se persiste un segundo contador que pueda divergir. `validAttemptCountBeforeCurrent` pertenece exclusivamente a `CoachInput` y describe el estado anterior al intento que se está evaluando.
 
+### 6.6 Contratos de aplicación del incremento 5
+
+El incremento 5 puede añadir únicamente contratos efímeros de aplicación para orquestar un intento. No implementa todavía `Attempt`, `Session`, historial, repositorios, resúmenes, documentos persistidos ni síntesis de voz.
+
+```ts
+type PracticeAttemptState =
+  | {
+      status: 'instruction'
+      attemptId: string
+      currentExercise: Exercise
+    }
+  | {
+      status: 'privacy_choice'
+      attemptId: string
+      currentExercise: Exercise
+      mode: 'browser' | 'manual' | 'demo' | null
+    }
+  | {
+      status: 'requesting_permission'
+      attemptId: string
+      currentExercise: Exercise
+      mode: 'browser' | 'manual'
+    }
+  | {
+      status: 'recording'
+      attemptId: string
+      currentExercise: Exercise
+      mode: 'browser' | 'manual'
+    }
+  | {
+      status: 'recorded'
+      attemptId: string
+      currentExercise: Exercise
+      mode: 'browser' | 'manual'
+      recordingReady: true
+    }
+  | {
+      status: 'awaiting_text'
+      attemptId: string
+      currentExercise: Exercise
+      recordingReady: true
+    }
+  | {
+      status: 'ready_to_analyze'
+      attemptId: string
+      currentExercise: Exercise
+      recordingReady: boolean
+      speechText: SpeechTextResult | null
+    }
+  | {
+      status: 'analyzing'
+      attemptId: string
+      currentExercise: Exercise
+      generation: number
+    }
+  | {
+      status: 'decision_ready'
+      attemptId: string
+      inputSnapshot: CoachInput
+      decision: CoachDecision
+    }
+  | {
+      status: 'recoverable_error'
+      attemptId: string
+      currentExercise: Exercise
+      error: PracticeAttemptError
+      playbackAvailable: boolean
+    }
+  | {
+      status: 'selection_preview'
+      attemptId: string
+      selectedExercise: Exercise
+    }
+
+type PracticeAttemptError =
+  | { kind: 'recording'; error: RecordingError }
+  | { kind: 'audio_analysis'; error: AudioAnalysisError }
+  | { kind: 'text_metrics'; error: TextMetricsError }
+  | { kind: 'recognition'; errorCode: SpeechRecognitionErrorCode }
+  | { kind: 'coaching'; error: CoachError }
+  | {
+      kind: 'application'
+      code: 'unexpected_coach_action' | 'selected_exercise_not_allowed'
+      message: string
+    }
+
+interface CoachEvidenceViewItem {
+  key: MetricEvidenceKey
+  label: string
+  value: string
+  unit: string | null
+  source: 'audio' | 'text' | 'exercise' | 'attempt_state'
+}
+```
+
+Los nombres anteriores son contratos de aplicación permitidos, no contratos persistidos. `PracticeAttemptState` es una unión discriminada por `status`; no se representa la fase principal mediante combinaciones de booleanos independientes. Browser y manual recorren las fases de permiso y grabación; demo puede pasar de `privacy_choice` a `ready_to_analyze` con sus fixtures, sin simular que grabó. Los recursos efímeros de captura siguen perteneciendo a los adaptadores existentes y nunca se serializan.
+
+`RecordingError`, `AudioAnalysisError` y `TextMetricsError` representan los errores tipados ya existentes de captura y métricas; se reutilizan dentro del error de aplicación y no se duplican ni se convierten en contratos persistidos.
+
+Un resultado asíncrono cuya generación ya no coincide se ignora. Puede registrarse como razón interna tipada si la implementación lo necesita, pero no se presenta como un error del usuario ni se escribe en telemetría o consola con datos del intento.
+
 ## 7. Contratos de reconocimiento y salida
 
 ```ts
@@ -680,6 +781,118 @@ Los umbrales son reglas de interacción del demo y no están clínicamente valid
 - incluye las versiones de audio, texto y coaching;
 - no compara a la persona con una población;
 - produce el mismo resultado para el mismo `SessionBundle`.
+
+### 10.7 Recorrido vertical canónico del incremento 5
+
+El incremento 5 integra exactamente un intento actual de tipo `word_repetition`:
+
+```text
+instrucción
+→ elección de procedencia
+→ captura real o fixture demo
+→ audio-metrics-v1
+→ texto final opcional
+→ text-metrics-v1 o null
+→ CoachInput
+→ coach-rules-v1
+→ CoachResult
+→ feedback escrito
+→ acción explícita
+```
+
+No incluye una segunda captura después de continuar, sesión de cinco intentos, historial, biblioteca final, `SpeechSynthesis`, persistencia, vista profesional, `summary-rules-v1`, backend, Supabase u OpenAI API.
+
+#### 10.7.1 Rutas browser, manual y demo
+
+**Browser**
+
+- Requiere una grabación real local y un resultado satisfactorio de `audio-metrics-v1`, aunque las métricas puedan contener banderas de calidad que conduzcan a `repeat_current`.
+- Inicia `SpeechRecognition` en paralelo con `MediaRecorder` desde la misma acción cuando existe soporte y el usuario aceptó el aviso.
+- Un texto provisional sólo se muestra; nunca produce métricas textuales ni coaching.
+- Si no existe resultado final, la UI ofrece entrada manual y una acción explícita para continuar sin texto. En esta última ruta, `CoachInput.textSource` y `CoachInput.textMetrics` son ambos `null`.
+
+**Manual**
+
+- Para ejecutar `coach-rules-v1` requiere una grabación real con resultado satisfactorio de `audio-metrics-v1`.
+- El texto es declarado por el usuario, conserva `source: 'manual'` y no se presenta como transcripción ni como contenido verificado contra el audio.
+- La comparación textual técnica manual sin captura puede conservarse como capacidad existente, pero no puede construir `CoachInput` ni ejecutar coaching porque falta `audioMetrics`.
+
+**Demo**
+
+- No solicita micrófono, no captura audio del usuario y no crea un `Blob` de usuario.
+- Usa un fixture local determinista de `DeterministicMetrics` —el nombre TypeScript vigente para el resultado implementado de `audio-metrics-v1`—, un `SpeechTextResult` predefinido con `source: 'demo'` y `text-metrics-v1` calculado localmente.
+- No usa red ni produce WPM. `DemoSpeechRecognizer` continúa sin recibir grabación, stream, PCM o métricas.
+- El fixture acústico demuestra integración técnica y nunca se presenta como medición real.
+- La UI muestra de forma persistente: “Este recorrido utiliza datos simulados.”, “No se grabó ni analizó su voz.” y “El texto simulado no procede de audio.”
+
+#### 10.7.2 Catálogo temporal
+
+El incremento usa un fixture temporal definido fuera de componentes React y compuesto, como mínimo, por:
+
+- un ejercicio actual válido de tipo `word_repetition`;
+- al menos un ejercicio permitido válido de tipo `phrase_repetition`.
+
+Ambos usan el contrato canónico `Exercise`. El catálogo se identifica como fixture temporal del incremento 5, no como biblioteca final del incremento 6. Después de un intento de palabra válido, `coach-rules-v1` debe poder seleccionar la frase permitida y devolver un `selectedExerciseId` perteneciente a `allowedExercises`.
+
+#### 10.7.3 Identidad y evaluación única
+
+- `attemptId` se genera con un contador monotónico local, sin fecha, UUID o aleatoriedad.
+- El ID permanece estable mientras vive el intento y se renueva al repetir, descartar o iniciar uno nuevo.
+- Cada intento tiene un token de generación que invalida callbacks y resultados asíncronos tardíos.
+- El doble clic durante `analyzing` se ignora.
+- `evaluateCoach` se invoca una sola vez desde el manejador explícito “Analizar intento”; no se invoca mediante efectos reactivos.
+- El `CoachInput` exacto y la `CoachDecision` resultante se conservan como snapshot hasta repetir o continuar.
+- La reproducción del audio no cambia automáticamente la fase. Un provisional no habilita el análisis.
+- Un fallo de análisis acústico conserva la reproducción cuando el navegador todavía pueda reproducir el `Blob`.
+- Repetir, descartar y continuar incrementan la generación e invalidan trabajos pendientes.
+
+#### 10.7.4 Construcción de `CoachInput`
+
+Para browser y manual, `audioMetrics` procede del `Blob` real actual. Para demo, procede del fixture acústico local claramente simulado. El resto de campos se construye así:
+
+- `attemptId`: ID monotónico estable del intento;
+- `currentExercise`: ejercicio temporal actual de palabra;
+- `textSource`: `textMetrics?.source ?? null`;
+- `textMetrics`: métricas calculadas desde un texto final utilizable o `null`;
+- `currentDifficulty`: dificultad del ejercicio actual;
+- `validAttemptCountBeforeCurrent`: `0`;
+- `coveredExerciseTypesBeforeCurrent`: `[]`;
+- `allowedExercises`: catálogo temporal validado.
+
+Cuando existen métricas textuales, su `targetText` debe coincidir exactamente con `currentExercise.targetText`. Un error de métricas textuales o de coaching no se degrada a una decisión parcial.
+
+#### 10.7.5 Acciones y estados terminales
+
+Para `repeat_current`:
+
+1. mostrar “Repetir este intento”;
+2. esperar que el usuario lo active;
+3. limpiar audio, URL, texto, métricas, errores y decisión;
+4. conservar el ejercicio actual;
+5. renovar ID y generación y volver a `instruction`;
+6. no iniciar grabación o reconocimiento.
+
+“Continuar de todas formas” después de `repeat_current` permanece fuera del incremento 5 y corresponde al incremento 7.
+
+Para `continue`:
+
+1. esperar que el usuario active “Continuar”;
+2. verificar que `selectedExerciseId` exista en `allowedExercises`; de lo contrario devolver `selected_exercise_not_allowed`;
+3. limpiar `Blob`, URL temporal y recursos del intento;
+4. mostrar `selection_preview` con el ejercicio seleccionado;
+5. terminar el recorrido sin iniciar otra grabación, activar una sesión, incrementar contadores o ejecutar nuevamente el motor.
+
+Con `validAttemptCountBeforeCurrent: 0`, `complete_session` es inalcanzable. Si la integración recibe esa acción, no muestra una sesión completada, no fabrica resumen ni selecciona ejercicio: devuelve `PracticeAttemptError` con código `unexpected_coach_action` y conserva una recuperación explícita. No se cambia `CoachAction` ni `coach-rules-v1` para este caso.
+
+#### 10.7.6 Evidencia y seguridad editorial
+
+Cada `evidenceKey` se resuelve contra el snapshot real de `CoachInput`. La UI muestra mensaje, explicación, foco, acción, versión de reglas, procedencia textual y evidencia con etiqueta, valor y unidad. Las claves internas no se muestran sin traducción.
+
+La UI no presenta similitud como precisión clínica, texto manual como transcripción, texto demo como audio reconocido ni una captura bloqueante como evaluación de la persona. El aviso no clínico permanece junto al resultado.
+
+#### 10.7.7 Límite de 10 MB
+
+El incremento 5 no cambia la implementación vigente del límite de 10 MB. Una captura que lo supere puede descartarse y debe ofrecer una ruta clara y respetuosa para comenzar nuevamente. Revisar la conservación de reproducción o cambiar la política del límite queda registrado para el incremento 10.
 
 ## 11. Persistencia local y eliminación
 

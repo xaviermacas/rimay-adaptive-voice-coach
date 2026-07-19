@@ -294,25 +294,79 @@ Ejecutar fixtures de cada rama, límites exactos, frontera del quinto intento, c
 
 ## Incremento 5 — Recorrido vertical de un intento
 
+**Estado: PLANIFICADO — NO INICIADO**
+
 **Objetivo**
 
-Unir instrucción, elección de privacidad, grabación, reconocimiento o entrada manual, reproducción, métricas, feedback y selección determinista para un ejercicio de palabra.
+Integrar un solo intento actual de palabra mediante este recorrido:
+
+```text
+instrucción
+→ elección de procedencia
+→ captura real o fixture demo
+→ audio-metrics-v1
+→ texto final opcional
+→ text-metrics-v1 o null
+→ CoachInput
+→ coach-rules-v1
+→ CoachResult
+→ feedback escrito
+→ acción explícita
+```
+
+Browser requiere grabación real local e inicia `SpeechRecognition` en paralelo cuando está disponible y autorizado. Manual requiere grabación real para construir `CoachInput`; su texto es declarado y no verificado contra el audio. Demo conserva la garantía de no solicitar micrófono y usa un fixture local determinista de `DeterministicMetrics`, un `SpeechTextResult` predefinido con `source: 'demo'` y métricas textuales locales, sin `Blob` de usuario, red o WPM.
+
+El incremento no incluye una segunda captura después de continuar, sesión de cinco intentos, historial, biblioteca final, `SpeechSynthesis`, persistencia, vista profesional, `summary-rules-v1`, backend, Supabase u OpenAI API.
 
 **Archivos previstos**
 
 - Máquina de estados en `src/features/practice/`.
 - Composición de captura, reconocedores y motor local.
 - Componentes mínimos del flujo paciente.
+- Fixture temporal definido fuera de React con una palabra actual y al menos una frase permitida.
 - Pruebas de integración con Testing Library.
+
+**Contratos y orquestación**
+
+- Se permiten `PracticeAttemptState`, `PracticeAttemptError` y `CoachEvidenceViewItem` como contratos efímeros de aplicación.
+- No se añaden `Attempt`, `Session`, historial, repositorios, resúmenes, contratos persistidos ni contratos de síntesis de voz.
+- La fase principal es una unión discriminada equivalente a `instruction`, `privacy_choice`, `requesting_permission`, `recording`, `recorded`, `awaiting_text`, `ready_to_analyze`, `analyzing`, `decision_ready`, `recoverable_error` y `selection_preview`.
+- `attemptId` usa un contador monotónico local, permanece estable durante el intento y se renueva al repetir, descartar o iniciar uno nuevo. No usa fecha, UUID o aleatoriedad.
+- Un token de generación invalida resultados tardíos. Repetir, descartar y continuar invalidan todo trabajo pendiente.
+- `evaluateCoach` se ejecuta una sola vez desde “Analizar intento”, nunca desde un efecto reactivo; un doble clic durante análisis se ignora.
+- El `CoachInput` y la decisión se conservan como snapshot hasta una acción explícita.
+- El catálogo temporal usa `Exercise`, está etiquetado como fixture y permite seleccionar una frase después de la palabra. No sustituye la biblioteca del incremento 6.
+
+**Acciones**
+
+- `repeat_current` muestra “Repetir este intento”, limpia recursos y resultado, conserva el ejercicio actual, vuelve al inicio y espera una nueva acción. No inicia captura o reconocimiento.
+- “Continuar de todas formas” después de `repeat_current` pertenece al incremento 7.
+- `continue` valida el ID seleccionado, limpia los recursos y termina en una vista previa. No inicia otra grabación, no activa sesión, no incrementa contadores y no vuelve a ejecutar el motor.
+- Con contador anterior `0`, `complete_session` es inalcanzable. Si aparece, produce `unexpected_coach_action` en un estado recuperable y no muestra sesión, resumen o ejercicio seleccionado.
+- Un candidato ausente del catálogo produce un error de aplicación tipado; nunca se aplica silenciosamente.
 
 **Aceptación**
 
-- El recorrido demo no usa `fetch` y muestra el fixture como predefinido.
-- El recorrido browser conserva procedencia y la ruta manual siempre está disponible.
-- El usuario controla reproducción, regrabación, análisis, repetición y avance.
-- Un error recuperable conserva sólo los datos temporales necesarios.
-- La decisión renderizada coincide con `coach-rules-v1` y usa un ejercicio permitido.
-- El `Blob` se libera al reemplazar, descartar o desmontar.
+- Un intento browser completo usa grabación local y métricas acústicas reales.
+- Un intento manual completo usa audio real y texto declarado; la UI dice que no fue verificado contra el audio.
+- Manual sin captura puede conservar la comparación textual técnica existente, pero no construye `CoachInput` ni ejecuta coaching.
+- Demo funciona sin micrófono, `Blob` de usuario, WPM, red o `fetch`; muestra “Este recorrido utiliza datos simulados.”, “No se grabó ni analizó su voz.” y “El texto simulado no procede de audio.”
+- El fixture demo de `DeterministicMetrics` declara `audio-metrics-v1`, se presenta como simulado y no como medición real.
+- Un provisional nunca se usa para métricas o coaching.
+- Cuando no existe final y el usuario elige continuar sin texto, `textSource` y `textMetrics` son `null`.
+- El motor se ejecuta exactamente una vez por activación de “Analizar intento”.
+- `repeat_current` espera una acción humana, limpia el intento y no inicia automáticamente captura o reconocimiento.
+- `continue` valida que `selectedExerciseId` pertenezca al fixture temporal, limpia recursos y termina en `selection_preview`.
+- No se inicia una segunda grabación ni se ejecuta otra vez el motor después de continuar.
+- Un error de coaching no produce feedback parcial ni un ejercicio inventado.
+- Un `complete_session` inesperado falla con `unexpected_coach_action` sin afirmar que existe una sesión completada.
+- La decisión renderizada coincide con `coach-rules-v1`; mensaje, explicación, foco, acción, versión, procedencia y evidencia proceden del snapshot real.
+- Cada evidencia visible tiene etiqueta, valor y unidad; no se muestran claves internas sin traducción.
+- La UI no presenta similitud como precisión clínica, manual como transcripción, demo como audio reconocido ni calidad bloqueante como evaluación de la persona.
+- Limpiar revoca `Blob` y URL cuando correspondan, libera recursos e ignora resultados tardíos.
+- La reproducción no cambia de fase por sí sola y un fallo acústico conserva el reproductor cuando siga siendo utilizable.
+- No existe persistencia, red propia, sesión, resumen, voz de salida ni cambios en el dominio cerrado de los incrementos 1–4.
+- El límite vigente de 10 MB no cambia; si descarta la captura, la UI permite comenzar nuevamente sin culpar al usuario. La revisión de esa política queda para el incremento 10.
 
 **Verificación**
 
@@ -325,6 +379,12 @@ npm run build
 ```
 
 Recorrer demo sin red, browser y manual; inspeccionar red, consola y almacenamiento.
+
+**División interna del incremento**
+
+- Tramo A: fixture temporal, contratos de aplicación, máquina de estados, construcción de `CoachInput`, evaluación única, errores y pruebas del controlador.
+- Tramo B: composición React, feedback, evidencia, acciones explícitas, limpieza, pruebas de integración y validación Chrome/Edge.
+- Ambos tramos pertenecen al mismo incremento formal. No se crean commits parciales salvo autorización posterior y el incremento no se considera aceptado hasta completar ambos.
 
 ## Incremento 6 — Tres ejercicios y voz accesible
 

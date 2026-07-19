@@ -6,7 +6,9 @@ Rimay es una aplicación web accesible para práctica guiada del habla con datos
 
 Rimay es una herramienta de apoyo para práctica y seguimiento. No diagnostica disartria, no clasifica severidad, no prescribe tratamiento y no sustituye el criterio de un profesional.
 
-Los incrementos 1 y 2 están completados. Antes de iniciar el incremento 3 se autorizó exclusivamente la actualización documental de la arquitectura de costo USD 0. Hasta que exista autorización expresa para ejecutar el nuevo incremento 3, sólo se pueden modificar `AGENTS.md` y archivos bajo `docs/hackathon-build/`. No escribas código, no agregues dependencias, no configures servicios y no hagas commit durante esta pausa documental.
+Los incrementos 1, 2, 3 y 4 están completados. El último commit confirmado es `b8a78fb feat: add deterministic coaching and adaptation rules`. El incremento 5 — Recorrido vertical de un intento es el siguiente incremento planificado y todavía no se ha iniciado.
+
+La tarea actual está autorizada exclusivamente para resolver bloqueos documentales previos al incremento 5 en `AGENTS.md`, `docs/hackathon-build/spec.md`, `docs/hackathon-build/checklist.md` y `docs/hackathon-build/build-notes.md`. El código del incremento 5 sólo puede modificarse después de una autorización explícita posterior. Durante esta pausa no escribas código de aplicación, no agregues dependencias, no configures servicios y no hagas commit.
 
 ## Arquitectura esperada
 
