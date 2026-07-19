@@ -574,6 +574,35 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 
 **Cierre:** el incremento 6 queda completado con dictamen `APTO PARA CERRAR`. La validación fue técnica, funcional y editorial, no clínica; no hubo revisión clínica o profesional externa y no se inició el incremento 7.
 
+## Resolución documental previa al incremento 7
+
+- Fecha: 2026-07-19.
+- Estado: bloqueos documentales previos al incremento 7 resueltos exclusivamente en documentación. Los incrementos 1–6 están completados; la rama confirmada es `main`, el último commit es `f846f38 feat: add exercise catalog and accessible speech output` y el incremento 7 no se inició.
+- Archivos autorizados: `AGENTS.md`, `spec.md`, `checklist.md` y `build-notes.md`. No se modificaron `scope.md`, `prd.md`, código, pruebas, configuración, dependencias o servicios; no se creó commit.
+- Alcance formal: Incremento 7 — Sesión de cinco intentos y adaptación completa. Contiene exactamente cinco intentos válidos aceptados, no cinco capturas totales. Activa ejercicios posteriores, cubre los tres tipos, aplica adaptación en válidos 4–5, permite repetir o continuar capturas bloqueantes, conserva historial efímero, finaliza y permite una nueva sesión desde `completed`.
+- Exclusiones: persistencia, contratos persistidos, repositorios, roles, resumen profesional, `summary-rules-v1`, panel profesional, backend, Supabase y OpenAI permanecen fuera del incremento 7.
+- Aceptación: analizar no registra. Sólo “Continuar” acepta una decisión `continue` y sólo “Finalizar sesión” acepta `complete_session`. La transición valida estado, generación, decisión y candidato; congela snapshots, añade un registro, deriva progreso/cobertura, limpia recursos y entra en preview o `completed` de forma atómica. Doble clic, render repetido o evento tardío no pueden duplicar el registro.
+- Historial: `validHistory` contiene únicamente `SessionAttemptRecord` con `position`, `mode`, `coachInputSnapshot`, `coachDecisionSnapshot` y `acceptedAction`. Cada registro es copia profunda readonly/congelada; admite fuente y métricas textuales `null`, identifica demo por modo y no conserva `SpeechTextResult` completo, provisional, fecha, UUID, aleatoriedad o audio.
+- Fuente de verdad: `validAttemptCountBeforeCurrent = validHistory.length`; no existe contador paralelo. La cobertura se deriva exclusivamente de tipos presentes en registros válidos aceptados y conserva los prefijos vacío, palabra, palabra/frase y los tres tipos.
+- Validez: una captura es válida con análisis acústico satisfactorio y sin `audio_too_short`, `no_speech_detected`, `too_quiet`, `possible_clipping` o silencio `>= 0.85`. Texto ausente, reconocimiento faltante o similitud `null` no invalidan; los errores técnicos no se registran ni se clasifican como capturas bloqueantes aceptables.
+- Bloqueantes: `repeat_current` no suma, no cubre y no entra en historial. Sólo vive hasta la siguiente acción; no existe historial técnico o contador de bloqueantes en este incremento.
+- Repetición: “Repetir este intento” conserva ejercicio, cancela voz, limpia audio, reconocimiento, texto, métricas y decisión, invalida trabajos, crea identidad/generación y vuelve a instrucción sin captura automática.
+- Continuación bloqueante: “Continuar de todas formas” aparece junto a repetir, no registra y no cambia `CoachDecision`. Usa la función pura de candidatos del incremento 4 con dificultad objetivo igual a la actual, cobertura derivada sólo del historial y sin similitud de la captura. Mientras falta cobertura conserva el tipo obligatorio y muestra que todavía se requiere un intento válido de ese tipo.
+- Preview: `selection_preview` deja de ser terminal. Tanto una aceptación válida como una continuación bloqueante limpian recursos y entran en preview; sólo la primera añade historial. “Comenzar siguiente ejercicio” vuelve a validar el candidato, lo activa, crea identidad/generación y vuelve a instrucción sin coaching, historial o captura automática.
+- Cobertura y adaptación: los tres primeros válidos aceptados son palabra, frase y lectura guiada. Las capturas bloqueantes nunca cubren. Los válidos 4 y 5 usan `coach-rules-v1` y la adaptación determinista vigente sobre `EXERCISE_CATALOG`, sin cambiar reglas, candidatos, plantillas, umbrales o versiones.
+- Finalización: cuatro registros previos más intento actual válido producen `complete_session`, pero la sesión sólo termina al pulsar “Finalizar sesión”. Esa acción registra posición 5 con `acceptedAction: "complete_session"`, limpia recursos, no selecciona ejercicio y entra en `completed`. Una quinta captura bloqueante mantiene 4 de 5 incluso al continuar.
+- Vista completada: muestra únicamente “Sesión técnica completada”, 5 de 5 válidos, tres tipos practicados, ausencia de audio, aviso no clínico e “Iniciar nueva sesión”. No muestra puntuación, severidad, cambio clínico, adherencia, tratamiento, resumen profesional o `summary-rules-v1`.
+- Nueva sesión: sólo desde `completed`; cancela voz, limpia cinco registros y recursos, restablece `practice-word-casa`, crea identidad/generación y vuelve a 0 de 5 sin captura ni persistencia. No existe reinicio global en curso.
+- Intentos totales: no se define un límite adicional de capturas. La sesión puede permanecer abierta hasta obtener cinco válidos; se registra como limitación conocida y no genera contador de fallos o copy culpabilizante.
+- Progreso: el indicador principal deja de usar “Ejercicio n de 3” y muestra válidos de cinco, válido pendiente, tipo actual y tipos cubiertos. La preview informa registros, siguiente válido y candidato; si procede de bloqueante mantiene el mismo pendiente y declara que la captura no se registró. Nunca representa progreso clínico.
+- Voz: se conserva la política del incremento 6 y se cancela antes de captura, repetir, continuar, continuar de todas formas, activar ejercicio, finalizar, iniciar nueva sesión y desmontar. No existe autoplay.
+- Privacidad: todo permanece en memoria; no se usa almacenamiento web, backend, Supabase u OpenAI. `Blob`, URL, stream, PCM y datos temporales se eliminan al cambiar de intento y nunca entran en `SessionAttemptRecord`.
+- Contratos posteriores: `Attempt` y `Session` permanecen preliminares y no rigen el incremento 7. El requisito preliminar de grabación real y texto completo es incompatible con demo y con intentos válidos sin texto; su forma persistida se resolverá en el incremento 8 y nunca podrá exigir audio conservado.
+- Secuenciación del PRD: `completed` en el incremento 7 sólo confirma cinco válidos en memoria. El estado completo del MVP se amplía con persistencia/roles en el incremento 8 y resumen/revisión profesional en el 9; no fue necesario modificar `prd.md` o `scope.md`.
+- División interna futura: tramo A de contratos/máquina/historial; B de palabra → frase → lectura; C de adaptación 4–5 y continuación bloqueante; D de finalización/progreso/voz/nueva sesión; E de matriz automática, Chrome/Edge y revisión. Los cinco forman un único incremento y no autorizan commits parciales.
+- Autorización: esta resolución no autoriza implementación. El código del incremento 7 requiere una solicitud explícita posterior.
+- Verificación documental: búsquedas residuales confirmaron que `complete_session` como error, contador/cobertura fijos y preview terminal aparecen únicamente en el alcance histórico de los incrementos 5–6; la sección 10.9 y el incremento 7 del checklist los sustituyen para el siguiente incremento. Los bloques de código están balanceados, `git diff --check` no reporta errores y el diff contiene sólo los cuatro documentos autorizados. `prd.md`, `scope.md`, código, pruebas, configuración, dependencias y lockfile permanecen intactos.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |
@@ -612,6 +641,19 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 | D-032 | `SpeechOutput` resuelve idioma y voz dentro del adaptador. | El dominio sólo habla texto, detiene y consulta disponibilidad; la selección española es determinista y no persiste objetos del navegador. |
 | D-033 | La voz del incremento 6 habla sólo instrucción y feedback curados. | No sintetiza contenido del usuario, objetivos por separado, métricas o IDs; toda voz tiene texto visible, control explícito y fallback no bloqueante. |
 | D-034 | El incremento 6 conserva un solo recorrido. | El catálogo y la voz preparan el incremento 7, pero `selection_preview` no inicia una segunda captura, sesión o historial. |
+| D-035 | El incremento 7 tiene exactamente cinco intentos válidos aceptados. | Capturas bloqueantes, descartes y errores técnicos no cuentan; no existe límite adicional de capturas totales. |
+| D-036 | Sólo una acción explícita acepta y registra un intento. | “Continuar” acepta `continue` y “Finalizar sesión” acepta `complete_session`; analizar nunca modifica el historial. |
+| D-037 | `validHistory` es la única fuente de verdad de progreso y cobertura. | El contador es su longitud y los tipos cubiertos se derivan de sus snapshots; no existe estado duplicado. |
+| D-038 | El historial del incremento 7 usa `SessionAttemptRecord` efímero. | Conserva snapshots profundos y modo, admite texto nulo y excluye texto completo, provisional, reloj, UUID, aleatoriedad y audio. |
+| D-039 | Las capturas bloqueantes no se conservan. | `repeat_current` no suma ni cubre; no existe historial técnico o contador de fallos en este incremento. |
+| D-040 | Continuar una captura bloqueante usa dificultad actual. | La función pura de candidatos recibe cobertura válida previa y no usa similitud de una captura bloqueante; `CoachDecision` no cambia. |
+| D-041 | `selection_preview` requiere activación explícita en el incremento 7. | “Comenzar siguiente ejercicio” valida y activa el candidato con nueva identidad, sin captura, historial o coaching automáticos. |
+| D-042 | La finalización exige “Finalizar sesión”. | `complete_session` no registra por análisis; la acción acepta el quinto snapshot, limpia y entra en `completed`. |
+| D-043 | `completed` es técnico y no profesional. | Muestra 5 de 5, cobertura, ausencia de audio y aviso no clínico; resumen y panel permanecen en el incremento 9. |
+| D-044 | Una nueva sesión sólo comienza desde `completed`. | Limpia historial y recursos, restablece palabra y vuelve a 0 de 5 sin persistencia o captura automática. |
+| D-045 | El progreso visible describe sólo flujo técnico. | Se muestran válidos de cinco y tipos cubiertos; no se presenta puntuación o evolución clínica. |
+| D-046 | El incremento 7 permanece completamente en memoria. | No usa almacenamiento web, contratos persistidos, repositorios, backend, Supabase u OpenAI y nunca conserva audio. |
+| D-047 | Los contratos preliminares `Attempt` y `Session` no rigen el incremento 7. | Demo no tiene grabación real y un válido puede carecer de texto; la forma persistida se resolverá en el incremento 8. |
 
 Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan sustituidas por D-004 a D-018 desde esta pausa documental.
 

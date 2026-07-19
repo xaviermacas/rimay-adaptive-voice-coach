@@ -2,9 +2,9 @@
 
 ## 1. Estado y alcance de esta especificación
 
-Esta especificación define la arquitectura objetivo del MVP. Los incrementos 1, 2, 3, 4 y 5 están completados; el último commit confirmado es `7f373d3 feat: add single-attempt practice flow`. El incremento 6 — Tres ejercicios y voz accesible es el siguiente incremento planificado y todavía no se ha iniciado.
+Esta especificación define la arquitectura objetivo del MVP. Los incrementos 1, 2, 3, 4, 5 y 6 están completados; el último commit confirmado es `f846f38 feat: add exercise catalog and accessible speech output`. El incremento 7 — Sesión de cinco intentos y adaptación completa es el siguiente incremento planificado y todavía no se ha iniciado.
 
-La revisión actual es exclusivamente documental y resuelve los contratos de integración previos al incremento 6. No autoriza código, dependencias, servicios, commit ni el inicio del incremento 6; su implementación requiere una autorización explícita posterior.
+La revisión actual es exclusivamente documental y resuelve los contratos de integración previos al incremento 7. No autoriza código, dependencias, servicios, commit ni el inicio del incremento 7; su implementación requiere una autorización explícita posterior.
 
 Palabras normativas:
 
@@ -376,7 +376,9 @@ type CoachResult =
 
 Cuando `textMetrics` no es `null`, `textMetrics.targetText` debe ser exactamente igual a `currentExercise.targetText`. La comparación contractual no normaliza, corrige ni elimina puntuación. Una diferencia devuelve `inconsistent_text_metrics` antes de usar esas métricas para dificultad, foco, evidencia o selección.
 
-### 6.5 Sesiones y resumen
+### 6.5 Contratos preliminares posteriores de sesión y resumen
+
+Los contratos de esta subsección describen una forma preliminar para persistencia y revisión profesional posteriores. No son el contrato de ejecución del incremento 7 y no deben implementarse ni reutilizarse sin reconciliación en el incremento 8. En particular, `Attempt` presupone `recording` y `speechText` completos, mientras el recorrido demo no tiene grabación real y un intento válido puede carecer de texto utilizable. Ninguna estructura futura puede exigir conservar `Blob`, URL, `MediaStream`, PCM o audio.
 
 ```ts
 interface Attempt {
@@ -427,7 +429,7 @@ interface ProfessionalSummary {
 
 Las recapturas descartadas y los errores técnicos nunca se convierten en `Attempt`. Las referencias sólo pueden apuntar a intentos de la misma sesión y a claves existentes.
 
-En `Session`, la cantidad de intentos válidos terminados se deriva de `attemptIds.length`; no se persiste un segundo contador que pueda divergir. `validAttemptCountBeforeCurrent` pertenece exclusivamente a `CoachInput` y describe el estado anterior al intento que se está evaluando.
+En el contrato persistido futuro, la cantidad de intentos válidos terminados se derivará de su colección de intentos y no de un segundo contador. La forma exacta de `Attempt`, `Session`, sus campos opcionales y su validación runtime se resolverá en el incremento 8 antes de persistir. El incremento 7 usa exclusivamente `SessionAttemptRecord` efímero, definido en la sección 10.9; no conserva `SpeechTextResult` completo, no exige grabación real para demo y no adopta estos contratos preliminares.
 
 ### 6.6 Contratos de aplicación del incremento 5
 
@@ -1007,6 +1009,207 @@ La voz se cancela antes de iniciar micrófono o reconocimiento, repetir el inten
 - Las pausas se muestran con texto y no sólo color; el flujo conserva zoom 200 %, reflow, `prefers-reduced-motion`, errores recuperables y compatibilidad con lector de pantalla.
 
 La revisión del catálogo en este incremento es técnica y editorial y puede realizarla el desarrollador. No se afirma revisión clínica o profesional externa. El filtro automatizado no sustituye una revisión profesional y las duraciones y pausas son reglas de interacción no clínicamente validadas.
+
+### 10.9 Contratos canónicos del incremento 7
+
+El incremento 7 — Sesión de cinco intentos y adaptación completa convierte el recorrido único del incremento 6 en una sesión efímera de exactamente cinco intentos válidos aceptados. Cinco intentos válidos no significa cinco capturas totales: las capturas descartadas, los errores técnicos y las capturas con calidad bloqueante no cuentan. El incremento activa ejercicios posteriores, garantiza la cobertura inicial, aplica adaptación en los intentos válidos cuarto y quinto, permite repetir o continuar una captura bloqueante, conserva un historial válido exclusivamente en memoria, finaliza mediante una acción explícita y permite iniciar una nueva sesión desde la vista completada.
+
+No incluye persistencia, contratos persistidos, repositorios, `summary-rules-v1`, resumen o panel profesional, roles, backend, Supabase u OpenAI. Esas capacidades conservan su orden en incrementos posteriores.
+
+Esta secuenciación no modifica el objetivo final del PRD. En el incremento 7, `completed` representa únicamente que existen cinco intentos válidos aceptados y disponibles en memoria; todavía no satisface el estado completo del MVP que además incluye resumen, persistencia y navegación profesional. El incremento 8 añade persistencia y roles, y el incremento 9 añade `summary-rules-v1` y revisión profesional.
+
+#### 10.9.1 Historial efímero y fuente de verdad
+
+El único registro de un intento válido aceptado es:
+
+```ts
+type SpeechRecognitionMode = 'browser' | 'manual' | 'demo';
+
+interface SessionAttemptRecord {
+  readonly position: 1 | 2 | 3 | 4 | 5;
+  readonly mode: SpeechRecognitionMode;
+  readonly coachInputSnapshot: CoachInput;
+  readonly coachDecisionSnapshot: CoachDecision;
+  readonly acceptedAction: "continue" | "complete_session";
+}
+```
+
+`validHistory` contiene exclusivamente valores `SessionAttemptRecord`. Cada registro es una copia profunda y queda profundamente readonly o congelado antes de añadirse. `position` debe ser exactamente `validHistory.length + 1` en el momento de aceptación. No contiene fecha, UUID o aleatoriedad.
+
+`coachInputSnapshot.textSource` y `coachInputSnapshot.textMetrics` pueden ser `null`. El modo demo se identifica con `mode: "demo"`; no se inventa una grabación real ni se guarda `SpeechTextResult` completo. El registro tampoco conserva texto provisional, `Blob`, URL, `MediaStream`, PCM, `AudioBuffer`, audio serializado u objetos crudos del navegador.
+
+La fuente de verdad es:
+
+```text
+validAttemptCountBeforeCurrent = validHistory.length
+```
+
+No existe un contador paralelo. `coveredExerciseTypesBeforeCurrent` se deriva exclusivamente de los registros válidos aceptados y de sus `coachInputSnapshot.currentExercise.type`. Los prefijos canónicos son:
+
+```text
+0 → []
+1 → [word_repetition]
+2 → [word_repetition, phrase_repetition]
+3 o 4 → [word_repetition, phrase_repetition, guided_reading]
+```
+
+Una sesión completada contiene exactamente cinco registros. El historial permanece en memoria mientras se muestra la vista `completed` y se elimina al iniciar una nueva sesión o cerrar la página.
+
+#### 10.9.2 Validez y aceptación explícita
+
+Un intento es válido cuando el análisis acústico termina correctamente y no contiene `audio_too_short`, `no_speech_detected`, `too_quiet` o `possible_clipping`, y su `silenceRatio` es menor que `0.85`. Ausencia de texto, `textSource: null`, `textMetrics: null`, similitud `null` o reconocimiento faltante no invalidan la captura. Un error de grabación, decodificación, métricas textuales o coaching no se convierte en intento válido ni en captura bloqueante registrable.
+
+El análisis y la creación de `CoachDecision` no registran el intento. El registro ocurre únicamente mediante una de estas acciones explícitas:
+
+- “Continuar”, cuando `decision.action === 'continue'`;
+- “Finalizar sesión”, cuando `decision.action === 'complete_session'`.
+
+La transición de aceptación es atómica y sigue este orden:
+
+1. comprobar que el estado actual, la generación, la acción y la decisión todavía coinciden; validar el candidato cuando corresponda;
+2. crear una copia profunda y congelada de `CoachInput` y `CoachDecision`;
+3. añadir un único `SessionAttemptRecord` con la siguiente posición;
+4. derivar contador y cobertura desde el nuevo `validHistory`;
+5. cancelar voz y limpiar todos los recursos temporales del intento;
+6. entrar en `selection_preview` o `completed`.
+
+Un guard síncrono de aceptación, la identidad del intento y la generación impiden que doble clic, render repetido o eventos tardíos añadan dos registros. Descartar o abandonar el intento antes de una acción de aceptación no añade nada al historial.
+
+#### 10.9.3 Máquina de sesión
+
+La máquina de sesión envuelve la máquina existente de intento y es la única autoridad sobre historial, ejercicio activo, ejercicio pendiente, preview y finalización. Sus estados principales son:
+
+```text
+in_progress
+  validHistory
+  currentExercise
+  currentAttemptState
+
+selection_preview
+  validHistory
+  pendingExercise
+  origin: accepted_valid_attempt | continued_blocking_attempt
+
+completed
+  validHistory con exactamente cinco registros
+```
+
+El estado `in_progress` conserva las fases discriminadas del intento actual. `selection_preview` no forma parte de un intento ya aceptado ni ejecuta coaching. `completed` no contiene ejercicio pendiente y no permite iniciar otra captura. No se modelan estas fases con booleanos independientes ni se duplican contador o cobertura.
+
+#### 10.9.4 Construcción de `CoachInput` y cobertura inicial
+
+Cada evaluación construye un snapshot nuevo con:
+
+- `attemptId`: identidad monotónica del intento actual;
+- `currentExercise`: ejercicio activo real de la máquina de sesión;
+- `audioMetrics`: métricas del intento actual, reales o demo según el modo;
+- `textSource`: fuente estable o `null`;
+- `textMetrics`: métricas textuales estables o `null`;
+- `currentDifficulty`: `currentExercise.difficulty`;
+- `validAttemptCountBeforeCurrent`: `validHistory.length`;
+- `coveredExerciseTypesBeforeCurrent`: cobertura derivada de `validHistory`;
+- `allowedExercises`: `EXERCISE_CATALOG`.
+
+El snapshot usado por el motor no cambia después del análisis. `coach-rules-v1`, candidatos, reglas, plantillas, umbrales, prioridades y versiones permanecen sin cambios.
+
+Los primeros tres intentos válidos aceptados son, en orden, `word_repetition`, `phrase_repetition` y `guided_reading`. Una captura bloqueante nunca satisface cobertura. Después del tercer válido, los intentos válidos cuarto y quinto usan la adaptación determinista vigente sobre `EXERCISE_CATALOG`.
+
+#### 10.9.5 Repetición y continuación de capturas bloqueantes
+
+Una captura bloqueante produce `repeat_current`, no incrementa progreso, no aporta cobertura y no entra en `validHistory`. Su input y decisión viven sólo hasta que el usuario actúa; luego se descartan. El incremento 7 no crea un historial técnico separado ni muestra un contador de capturas bloqueantes.
+
+Con `repeat_current` se muestran juntas “Repetir este intento” y “Continuar de todas formas”. `CoachDecision` conserva `selectedExerciseId: null`; no se añade un candidato alternativo a su contrato.
+
+“Repetir este intento”:
+
+1. conserva el ejercicio actual;
+2. cancela voz;
+3. elimina `Blob`, URL, stream, reconocimiento, texto, métricas, errores y decisión;
+4. invalida trabajos tardíos;
+5. crea otro `attemptId` y otra generación;
+6. vuelve a la instrucción y espera acción humana.
+
+No modifica `validHistory` ni inicia captura o reconocimiento.
+
+“Continuar de todas formas” mantiene la captura como bloqueante, no la registra, no incrementa válidos, no aporta cobertura y no la convierte en evidencia de progreso. Selecciona el ejercicio pendiente mediante `selectExerciseCandidate` u otra función pura ya exportada por el incremento 4, con:
+
+- `targetDifficulty = currentExercise.difficulty`;
+- cobertura y tipo obligatorio derivados sólo de `validHistory`;
+- ninguna similitud textual ni adaptación derivada de la captura bloqueante.
+
+Mientras falte cobertura inicial, el candidato pertenece al tipo obligatorio aún pendiente y puede ser el mismo ejercicio actual. La preview muestra exactamente: “Esta captura no contará como intento válido. La sesión aún necesita un intento válido de este tipo.” Después de cubrir los tres tipos, la política puede elegir otro ejercicio permitido mediante el orden determinista vigente.
+
+#### 10.9.6 Preview y activación del ejercicio
+
+`selection_preview` deja de ser terminal, pero no activa nada automáticamente. Se alcanza así:
+
+```text
+Continuar
+→ registrar intento válido
+→ limpiar recursos
+→ selection_preview
+
+Continuar de todas formas
+→ no registrar
+→ limpiar recursos
+→ selection_preview
+```
+
+La preview muestra el ejercicio seleccionado, tipo, dificultad, instrucción, texto objetivo y progreso de sesión. Cuando `origin === 'continued_blocking_attempt'`, también muestra el aviso de captura no registrada. Su única acción de avance es “Comenzar siguiente ejercicio”.
+
+Al activarla, la aplicación vuelve a validar que `pendingExercise` pertenece a `EXERCISE_CATALOG`, lo convierte en `currentExercise`, crea un nuevo `attemptId`, invalida la generación anterior y vuelve a la instrucción. Esta acción no modifica `validHistory`, no ejecuta coaching y no inicia micrófono, reconocimiento o grabación.
+
+Para una decisión válida `continue`, el ejercicio pendiente coincide con `CoachDecision.selectedExerciseId`. Para una captura bloqueante, procede de la política pura descrita en 10.9.5.
+
+#### 10.9.7 Finalización y nueva sesión
+
+La calidad bloqueante mantiene prioridad. Con cuatro registros previos y captura válida, `coach-rules-v1` devuelve `complete_session`; la sesión todavía no está completa. La UI muestra “Finalizar sesión” y sólo esa acción acepta el quinto intento.
+
+“Finalizar sesión” valida `decision.action === 'complete_session'`, crea el quinto `SessionAttemptRecord` con `acceptedAction: "complete_session"`, cancela voz, limpia recursos temporales, no selecciona ejercicio y entra en `completed`. Una quinta captura bloqueante devuelve `repeat_current`, deja `validHistory.length === 4` y no completa aunque el usuario elija “Continuar de todas formas”; todavía se requiere otro intento válido.
+
+La vista `completed` muestra únicamente:
+
+- título “Sesión técnica completada”;
+- “5 de 5 intentos válidos”;
+- “3 tipos de ejercicios practicados”;
+- indicación de que el audio no fue conservado;
+- aviso “Estos resultados describen una sesión técnica y no constituyen una evaluación clínica.”;
+- botón “Iniciar nueva sesión”.
+
+No muestra puntuación global, promedio clínico, severidad, mejora o deterioro, adherencia, tratamiento, resumen profesional ni `summary-rules-v1`.
+
+“Iniciar nueva sesión” sólo existe en `completed`. Cancela voz, elimina los cinco registros y todo recurso temporal, restablece `practice-word-casa`, muestra cero de cinco, crea nueva identidad y generación y vuelve a la instrucción sin iniciar captura. No existe reinicio global durante una sesión en curso y no se persiste nada.
+
+#### 10.9.8 Progreso accesible
+
+El progreso principal deja de ser “Ejercicio n de 3” y describe únicamente el flujo técnico de sesión. Durante un intento muestra:
+
+- “Intentos válidos: n de 5”;
+- “Intento válido pendiente: n+1 de 5”;
+- “Tipo actual: [tipo]”;
+- “Tipos cubiertos: x de 3”.
+
+La preview muestra “Intentos válidos registrados: n de 5”, el tipo y ejercicio pendientes y “Siguiente intento válido: n+1 de 5”. Si procede de una captura bloqueante, `n` no cambia, el número pendiente se mantiene y se informa que la captura anterior no fue registrada. Estos contadores nunca se presentan como progreso, puntuación o evolución clínica.
+
+#### 10.9.9 Voz, privacidad y límite de capturas
+
+Se conserva exactamente la política de voz del incremento 6. `SpeechSynthesis` se cancela antes de iniciar cada captura, repetir, continuar, continuar de todas formas, comenzar el ejercicio siguiente, finalizar sesión, iniciar una nueva sesión y desmontar. No existe autoplay de instrucción, feedback o finalización.
+
+La sesión y el historial viven sólo en memoria. El incremento no usa `localStorage`, Session Storage, IndexedDB, Cache API, backend, Supabase u OpenAI. Al cambiar de intento se eliminan `Blob`, URL, stream y datos temporales; `SessionAttemptRecord` nunca conserva audio.
+
+No existe un límite total de capturas en el incremento 7. La sesión puede permanecer abierta hasta obtener cinco intentos válidos. Esta es una limitación conocida; la UI no muestra un contador de fallos ni culpa al usuario.
+
+#### 10.9.10 División interna y condición de parada
+
+El incremento 7 permanece como un único incremento formal con cinco tramos:
+
+- A — contratos de aplicación, máquina pura e historial readonly;
+- B — activación palabra → frase → lectura y primeros tres válidos;
+- C — adaptación de intentos 4–5 y “Continuar de todas formas”;
+- D — finalización, progreso, voz, limpieza y nueva sesión;
+- E — matriz automática, validación Chrome/Edge y revisión completa.
+
+No se crean commits parciales salvo autorización posterior. Completar un tramo no autoriza el siguiente incremento ni persistencia, roles, resumen profesional o panel profesional.
 
 ## 11. Persistencia local y eliminación
 
