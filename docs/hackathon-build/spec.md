@@ -263,6 +263,12 @@ interface WordSubstitution {
   transcribedToken: string
 }
 
+type WordsPerMinuteUnavailableReason =
+  | 'no_real_recording'
+  | 'invalid_total_duration'
+  | 'demo_source'
+  | 'insufficient_voice_activity'
+
 interface TextMetrics {
   algorithmVersion: 'text-metrics-v1'
   source: SpeechTextSource
@@ -279,6 +285,7 @@ interface TextMetrics {
   wordErrorRate: number
   textSimilarity: number
   wordsPerMinute: number | null
+  wordsPerMinuteUnavailableReason: WordsPerMinuteUnavailableReason | null
   warnings: readonly string[]
 }
 
@@ -287,7 +294,7 @@ type TextMetricsResult =
   | { status: 'error'; error: { code: 'empty_target'; message: string } }
 ```
 
-`TextMetrics` describe una comparación técnica. `targetText` y `transcribedText` conservan las representaciones normalizadas; el alineamiento compara los tokens derivados de `comparisonText`, pero las listas visibles conservan tildes, diéresis y `ñ`. Para origen `manual`, la UI debe decir que los cálculos se basan en texto escrito por el usuario; para origen `demo`, que se basan en un fixture. Ninguna fuente convierte los valores en evaluación clínica.
+`TextMetrics` describe una comparación técnica. `targetText` y `transcribedText` conservan las representaciones normalizadas; el alineamiento compara los tokens derivados de `comparisonText`, pero las listas visibles conservan tildes, diéresis y `ñ`. Para origen `manual`, la UI debe decir que los cálculos comparan la frase objetivo con texto escrito por el usuario y que Rimay no verificó ese contenido contra la grabación; para origen `demo`, que se basan en un fixture. Ninguna fuente convierte los valores en evaluación clínica.
 
 ### 6.4 Motor de retroalimentación y adaptación
 
@@ -543,10 +550,12 @@ wordsPerMinute = transcribedWordCount / (totalDurationMs / 60_000)
 ```
 
 - `totalDurationMs` debe proceder de una grabación real, ser finito y mayor que cero. Incluye pausas y representa la velocidad global de la producción.
-- `wordsPerMinute` se redondea a una cifra decimal y es `null` si no existe grabación real o la duración es cero o inválida.
+- `wordsPerMinute` se redondea a una cifra decimal y es `null` si no existe grabación real o la duración es cero, inválida o no finita.
 - Un resultado demo sin audio real produce `null`.
 - Una entrada manual sin captura produce `null`; si está asociada a una captura real válida, puede producir WPM y conserva `source: 'manual'`.
-- `estimatedSpeechDurationMs` no se usa como denominador de WPM: medir sólo el tiempo estimado de voz correspondería a otra métrica similar a una tasa de articulación, fuera de este incremento.
+- WPM también es `null` si `qualityFlags` contiene `no_speech_detected` o `too_quiet`, o si `estimatedSpeechDurationMs` es menor que `audio-metrics-v1.minimumSpeechDurationMs`.
+- `estimatedSpeechDurationMs` se usa sólo como condición de calidad y nunca como denominador de WPM: medir sólo el tiempo estimado de voz correspondería a otra métrica similar a una tasa de articulación, fuera de este incremento.
+- `wordsPerMinuteUnavailableReason` distingue ausencia de grabación, duración inválida, fuente demo y actividad de voz insuficiente; es `null` cuando existe un valor numérico.
 - La UI nombra siempre la procedencia y no afirma que las palabras manuales o demo fueron contadas automáticamente a partir de la voz.
 
 ## 10. Motor determinista de retroalimentación y adaptación

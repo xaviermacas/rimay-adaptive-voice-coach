@@ -3,17 +3,8 @@ import type {
   CoachRequest,
   CoachResponse,
   ProfessionalSummary,
-  RecordingMetadata,
   Session,
-  TranscriptionResult,
 } from './domain';
-
-export interface Transcriber {
-  transcribe(
-    audio: Blob,
-    metadata: RecordingMetadata,
-  ): Promise<TranscriptionResult>;
-}
 
 export interface Coach {
   coachAttempt(request: CoachRequest): Promise<CoachResponse>;
@@ -29,8 +20,7 @@ export interface SessionRepository {
 }
 
 export interface SpeechOutput {
-  speak(text: string, language: 'es-ES' | 'es-MX'): Promise<void>;
+  speak(text: string, language: string): Promise<void>;
   stop(): void;
   isSupported(): boolean;
 }
-

@@ -1,6 +1,9 @@
 import type { DeterministicMetrics } from '../audio/types';
+import type {
+  SpeechRecognitionMode,
+  SpeechTextResult,
+} from './speech';
 
-export type ProviderMode = 'demo' | 'live';
 export type UserRole = 'patient' | 'professional';
 export type ExerciseType = 'word' | 'phrase' | 'guided_reading';
 export type Difficulty = 1 | 2 | 3 | 4 | 5;
@@ -23,13 +26,6 @@ export interface RecordingMetadata {
   channelCount: number | null;
 }
 
-export interface TranscriptionResult {
-  text: string;
-  provider: string;
-  confidence: number | null;
-  warnings: readonly string[];
-}
-
 export interface CoachEvidence {
   metric: keyof DeterministicMetrics;
   value: number | string | null;
@@ -39,7 +35,7 @@ export interface CoachEvidence {
 export interface CoachRequest {
   attemptId: string;
   exercise: Exercise;
-  transcript: TranscriptionResult | null;
+  speechText: SpeechTextResult | null;
   metrics: DeterministicMetrics;
   allowedNextExerciseIds: readonly string[];
   recentExerciseIds: readonly string[];
@@ -51,7 +47,7 @@ export interface CoachResponse {
   focus: string;
   nextExerciseId: string;
   evidence: readonly CoachEvidence[];
-  source: 'model' | 'deterministic_fallback';
+  source: 'local_rules';
 }
 
 export interface Attempt {
@@ -60,7 +56,7 @@ export interface Attempt {
   exercise: Exercise;
   recording: RecordingMetadata;
   audio: Blob;
-  transcript: TranscriptionResult | null;
+  speechText: SpeechTextResult | null;
   metrics: DeterministicMetrics;
   coach: CoachResponse;
   createdAt: string;
@@ -73,7 +69,7 @@ export interface Session {
   completedAt: string | null;
   attempts: readonly Attempt[];
   plannedExerciseId: string;
-  providerMode: ProviderMode;
+  recognitionMode: SpeechRecognitionMode;
 }
 
 export interface ProfessionalSummary {
@@ -83,5 +79,5 @@ export interface ProfessionalSummary {
   practiceFocus: readonly string[];
   evidence: readonly CoachEvidence[];
   disclaimer: string;
-  source: 'model' | 'deterministic_fallback';
+  source: 'local_rules';
 }

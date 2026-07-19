@@ -1,5 +1,4 @@
 import { AudioRecorderCard } from '../features/recording/AudioRecorderCard';
-import { DEFAULT_PROVIDER_MODE } from '../providers/demo/providerMode';
 
 export function App() {
   return (
@@ -15,20 +14,20 @@ export function App() {
             </p>
           </div>
           <span className="inline-flex min-h-11 items-center self-start rounded-full border border-rimay-600 bg-white px-4 text-sm font-semibold text-rimay-900 sm:self-auto">
-            Modo {DEFAULT_PROVIDER_MODE}
+            Sin backend
           </span>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
         <div className="max-w-4xl">
-          <p className="text-sm font-semibold text-rimay-700">Incremento técnico 2</p>
+          <p className="text-sm font-semibold text-rimay-700">Incremento técnico 3</p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
             Comprueba tu micrófono con tranquilidad
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-700">
-            Este prototipo demuestra captura, reproducción y métricas técnicas
-            calculadas localmente. No transcribe ni evalúa clínicamente la voz.
+            Este prototipo demuestra captura, texto opcional y métricas técnicas
+            calculadas localmente. No diagnostica ni evalúa clínicamente la voz.
           </p>
         </div>
 

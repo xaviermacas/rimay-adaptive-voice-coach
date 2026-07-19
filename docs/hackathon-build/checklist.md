@@ -118,15 +118,15 @@ Antes del incremento 3 se reemplazó el plan anterior de Supabase/OpenAI por Web
 
 ## Incremento 3 — Reconocimiento del navegador, demo, entrada manual y métricas textuales
 
-**Estado: PENDIENTE — REQUIERE AUTORIZACIÓN EXPRESA**
+**Estado: COMPLETADO — 2026-07-18**
 
-La resolución documental de contratos y fórmulas de `text-metrics-v1` está completada. Esta resolución no inicia ni autoriza la implementación del incremento.
+La autorización expresa para implementar exclusivamente este incremento se recibió el 2026-07-18. La primera validación manual reveló una ambigüedad de procedencia y motivó guardas adicionales de calidad para WPM. La corrección, la verificación automatizada y la revalidación manual final fueron completadas correctamente; la evidencia observada quedó registrada en `build-notes.md`.
 
 **Objetivo**
 
 Resolver el principal riesgo restante sin servicios contratados: ejecutar `BrowserSpeechRecognizer` en paralelo con `MediaRecorder`, proporcionar `DemoSpeechRecognizer` y entrada manual, y producir `text-metrics-v1` local y determinista.
 
-**Archivos previstos**
+**Áreas implementadas**
 
 - Contratos de procedencia, estados, errores, `SpeechTextResult` y `TextMetrics` en `src/domain/contracts/`.
 - Normalización, tokenización y comparación en `src/domain/text/`.
@@ -151,8 +151,8 @@ Resolver el principal riesgo restante sin servicios contratados: ejecutar `Brows
 - `text-metrics-v1` alinea palabras por programación dinámica con `match`, `substitution`, `omission` y `addition`; los empates siguen ese mismo orden.
 - `wordErrorRate` divide sustituciones, omisiones y adiciones por las palabras objetivo; `textSimilarity = max(0, 1 - wordErrorRate)`.
 - Un objetivo vacío produce el error tipado `empty_target` y no fabrica métricas.
-- WPM usa `transcribedWordCount / (totalDurationMs / 60_000)` únicamente con una grabación real y duración válida. Entrada manual sin captura y demo sin audio real producen `null`.
-- Las métricas indican fuente y no se presentan como evaluación clínica.
+- WPM usa `transcribedWordCount / (totalDurationMs / 60_000)` únicamente con una grabación real, duración válida y actividad de voz suficiente. Entrada manual sin captura, demo sin audio real, `no_speech_detected`, `too_quiet` y voz estimada bajo el umbral configurado producen `null`; `estimatedSpeechDurationMs` nunca es el denominador.
+- Las métricas indican fuente y no se presentan como evaluación clínica. La ruta manual declara que compara texto escrito por el usuario y que no verificó su correspondencia con el audio.
 - No se implementan todavía coaching, adaptación, sesión persistida, panel profesional, OpenAI, Supabase o despliegue.
 
 **Verificación automatizada**
@@ -166,18 +166,40 @@ npm test
 npm run build
 ```
 
+Resultado observado el 2026-07-18:
+
+- [x] `npm.cmd run lint`: código 0, sin errores ni advertencias.
+- [x] `npm.cmd run typecheck`: código 0.
+- [x] Pruebas específicas de normalización, métricas, reconocedores, hook e integración: aprobadas durante el desarrollo.
+- [x] `npm.cmd test`: 12 archivos y 117 pruebas aprobadas después de la corrección de validación manual.
+- [x] `npm.cmd run build`: código 0, 39 módulos transformados.
+- [x] `git diff --check`: sin errores.
+- [x] Sin cambios en `package.json` o `package-lock.json`; no se añadieron dependencias.
+- [x] Búsqueda en `src/`: sin `fetch`, persistencia, SDKs comerciales, contratos heredados de transcripción ni servicios runtime nuevos.
+
+**Corrección posterior a la validación manual**
+
+- [x] La ayuda de entrada manual pide declarar exactamente las palabras pronunciadas, incluidas omisiones y adiciones, y desaconseja copiar automáticamente la frase objetivo.
+- [x] El resumen muestra la fuente y usa etiquetas distintas para texto manual, reconocido y simulado; la ruta manual advierte que Rimay no verificó el contenido contra la grabación.
+- [x] WPM manual queda no disponible con `no_speech_detected`, `too_quiet` o voz estimada bajo el umbral vigente; con audio elegible conserva la duración total como denominador y explica que el conteo procede del texto declarado.
+- [x] La investigación automatizada cubre un final de diez palabras, más de diez palabras en dos segmentos, provisional seguido de final, varios eventos finales, palabras adicionales, final dentro de 500 ms y resultado posterior al cierre.
+- [x] No existe recorte a siete palabras, límite de caracteres o ajuste al objetivo en la ruta browser. Se conserva `continuous: false` para el ejercicio corto; el comportamiento observado se atribuye probablemente al cierre de sesión del navegador.
+- [x] Verificación final: lint sin errores ni advertencias; typecheck código 0; 12 archivos y 117 pruebas aprobadas; build con 39 módulos transformados; `git diff --check` sin errores.
+- [x] La revalidación manual confirmó procedencia, advertencia y métricas manuales; una captura silenciosa mostró ambas alertas de calidad y WPM no disponible.
+- [x] La revalidación conservó frases de más de siete palabras sin pausa extensa, confirmó que una pausa extensa puede cerrar la sesión única del navegador y no encontró truncación propia de Rimay.
+
 **Verificación manual**
 
-- Chrome y Edge: aviso antes del reconocimiento, elección manual y reconocimiento cuando exista soporte.
-- Secuencia provisional/final visible, grabación y reconocimiento paralelos, detener y cancelar.
-- Permiso rechazado, silencio y red desactivada con recuperación manual.
-- Demo ejecutada sin red después de cargar la app y rotulada como fixture.
-- Network confirma que la aplicación no envía el `Blob`, texto o métricas.
-- Storage confirma que este incremento no persiste audio ni resultados temporales.
+- [x] El aviso de privacidad apareció y requirió aceptación explícita; la frase objetivo fue reconocida y se detectaron omisiones y adiciones.
+- [x] Frases de más de siete palabras se conservaron sin pausa extensa; una pausa extensa pudo finalizar la sesión no continua y no se observó truncación propia de Rimay.
+- [x] La entrada manual mostró fuente, advertencia y comparación correctas sin atribuir verificación al audio.
+- [x] Una captura silenciosa mostró actividad insuficiente, nivel demasiado bajo y WPM no disponible.
+- [x] Un reconocimiento fallido o finalizado conservó la grabación y la entrada manual; demo permaneció rotulado como simulación.
+- [x] Network, Storage y consola no mostraron envíos propios, persistencia temporal ni errores; descartar eliminó grabación, texto y métricas.
 
 **Condición de parada**
 
-Al cumplir la aceptación, registrar evidencia en `build-notes.md` y detenerse. No iniciar el incremento 4 sin autorización.
+**Cierre:** el responsable confirmó la revalidación manual final del incremento 3. La evidencia se registró en `build-notes.md`; no se autoriza ni se inicia el incremento 4 mediante este cierre.
 
 ## Incremento 4 — Motor determinista de retroalimentación y adaptación
 

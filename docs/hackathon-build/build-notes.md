@@ -226,6 +226,88 @@ La diferencia pequeña entre duración capturada y duración decodificada se con
 - WPM: `wordsPerMinute = transcribedWordCount / (totalDurationMs / 60_000)`. Requiere grabación real y duración positiva; demo sin audio real y entrada manual sin captura producen `null`. El tiempo estimado de voz no interviene en esta fórmula.
 - Git: los cambios permanecen sin commit. El incremento 3 continúa pendiente de autorización expresa.
 
+## Registro de implementación del incremento 3
+
+- Fecha de ejecución: 2026-07-18.
+- Estado: incremento 3 completado; la implementación, la verificación automatizada y la revalidación manual final fueron aprobadas por el responsable.
+- Autorización aplicada: exclusivamente reconocimiento opcional del navegador, fixture demo, entrada manual, coordinación con la captura existente y `text-metrics-v1`. No se inició el incremento 4.
+- Dependencias: no se agregaron ni actualizaron paquetes; `package.json` y `package-lock.json` permanecen sin cambios.
+- Contratos: `SpeechTextResult` es el resultado canónico multifuente. Se retiraron del código los contratos preliminares orientados a proveedores y se añadieron procedencia, estados, errores, callbacks y ciclo de vida de reconocimiento.
+- Reconocimiento browser: `BrowserSpeechRecognizer` detecta primero `SpeechRecognition` y después `webkitSpeechRecognition`, solicita `es-EC`, habilita provisionales, limita alternativas a una y usa una sesión no continua. Traduce soporte ausente, permiso, captura, red, silencio, cancelación, idioma, política de servicio y error desconocido a códigos internos.
+- Ciclo de vida browser: se impide el doble inicio, se acumulan segmentos finales por índice, `stop()` permite recibir el final, `dispose()` aborta sin callbacks tardíos y un error de silencio posterior no destruye un resultado final ya recibido. No existe reinicio automático.
+- Coordinación: en modo browser, la llamada a `getUserMedia` se inicia antes del reconocedor dentro de la misma acción explícita. El reconocedor no recibe el `Blob`; un fallo de reconocimiento no elimina una captura válida y un fallo de captura cancela la escucha activa.
+- Privacidad: antes de habilitar browser se exige consentimiento tras informar que Rimay no envía ni almacena el `Blob` y que el navegador puede usar un servicio remoto propio. No se promete funcionamiento local u offline.
+- Demo: `DemoSpeechRecognizer` usa un fixture y reloj inyectable, emite una secuencia provisional/final estable y no recibe grabación, stream, PCM o métricas. La UI declara que el texto es predefinido y no analizó audio.
+- Manual: está disponible desde el inicio y después de errores. Puede usarse sin captura o junto a una grabación real; editar un resultado browser o demo cambia la procedencia efectiva a `manual`.
+- Normalización: `originalText` conserva la entrada; `normalizedText` usa NFC, minúsculas, puntuación sustituida por espacios y espacios colapsados, conservando tildes, diéresis y `ñ`; `comparisonText` elimina tildes y diéresis sin convertir `ñ` en `n`.
+- Métricas: `text-metrics-v1` alinea palabras por programación dinámica con `match`, `substitution`, `omission` y `addition`, y desempata en ese orden. Un objetivo vacío devuelve `empty_target`.
+- Fórmulas: `wordErrorCount = substitutions + omissions + additions`, `wordErrorRate = wordErrorCount / targetWordCount` y `textSimilarity = max(0, 1 - wordErrorRate)`. WER puede superar `1` y la similitud queda limitada a `[0, 1]`.
+- WPM: usa `transcribedWordCount / (totalDurationMs / 60_000)` sólo cuando existe una grabación real decodificada con duración válida. Demo, texto manual sin captura, ausencia de análisis y duración inválida producen `null`; `estimatedSpeechDurationMs` no interviene.
+- Presentación: la interfaz muestra procedencia, provisionales, texto final editable, coincidencias, sustituciones, omisiones, adiciones, WER, similitud y WPM con aviso explícito de que no son puntuaciones clínicas.
+- Recursos y datos: no se implementaron `fetch`, backend, Supabase, OpenAI, servicios comerciales, persistencia, logs de texto/audio ni almacenamiento del `Blob`. Descartar limpia captura, URL temporal, análisis, reconocimiento, texto y métricas del intento.
+- Verificación automatizada final: `npm.cmd run lint` finalizó sin errores ni advertencias; `npm.cmd run typecheck` terminó con código 0; `npm.cmd test` aprobó 11 archivos y 101 pruebas; `npm.cmd run build` transformó 39 módulos y terminó con código 0; `git diff --check` no reportó errores.
+- Cobertura relevante: normalización Unicode y protección de `ñ`; alineamiento y desempate; WER mayor que uno; WPM con y sin audio; detección estándar, prefijada y ausente; errores Web Speech; finales múltiples; doble inicio; desmontaje; espera del final; demo determinista; orden captura/reconocimiento; recuperación manual; procedencia editada y regresiones del grabador/análisis de audio.
+- Revalidación manual: completada correctamente; los resultados observados y la limitación de sesión no continua se registran en la sección de cierre siguiente.
+- Git: el cierre se versiona localmente con el mensaje `feat: add browser speech recognition and text metrics`; no se hace push ni se configuran remotos.
+
+## Corrección posterior a la validación manual del incremento 3
+
+- Fecha: 2026-07-18.
+- Alcance: corrección exclusiva de procedencia manual, elegibilidad de WPM e investigación de la aparente finalización del reconocimiento alrededor de siete palabras. No se inició el incremento 4.
+- Diagnóstico manual: el 100 % al copiar la frase objetivo no era un defecto matemático. `text-metrics-v1` comparaba correctamente frase objetivo y texto declarado; la ambigüedad estaba en una interfaz que no explicaba con suficiente énfasis que la entrada manual no valida el contenido acústico.
+- Presentación manual: antes del campo se pide escribir exactamente lo pronunciado, incluidas omisiones y palabras adicionales. El resumen muestra `Comparación de texto introducido manualmente`, la fuente `manual`, el aviso de que Rimay no verificó la correspondencia con la grabación y una etiqueta de coincidencia específica.
+- Presentación multifuente: browser usa `Coincidencia del texto reconocido con la frase objetivo` y demo usa `Coincidencia del texto simulado con la frase objetivo`; ninguna de estas comparaciones se atribuye a una fuente distinta de la declarada por `SpeechTextResult.source`.
+- Elegibilidad WPM: la fórmula continúa siendo `transcribedWordCount / (totalDurationMs / 60_000)`. El resultado es `null` sin grabación real, con duración total cero, inválida o no finita, para demo sin audio, para manual sin captura, con `no_speech_detected`, con `too_quiet` o cuando `estimatedSpeechDurationMs` no alcanza `audio-metrics-v1.minimumSpeechDurationMs`.
+- Frontera acústica: `estimatedSpeechDurationMs` sólo actúa como guarda de calidad; nunca sustituye a `totalDurationMs` en el denominador. Cuando una entrada manual sí produce WPM, la UI explica que el conteo de palabras fue declarado por el usuario y se combinó con la duración total de la captura.
+- Investigación browser: `BrowserSpeechRecognizer` recorre desde `event.resultIndex` hasta `event.results.length`, conserva cada segmento final por índice, concatena finales en orden, mantiene separados provisionales y finales y no recorta el texto según la frase objetivo. No se encontraron `slice`, `substring`, límites de palabras, uso exclusivo del primer resultado ni sobrescritura de finales anteriores en esa ruta.
+- Cierre browser: un final recibido dentro de la espera de 500 ms se conserva; después del cierre y disposición, los eventos tardíos se ignoran según el contrato. Se mantiene `continuous: false`, porque las pruebas no evidencian truncación propia y el ejercicio actual es corto.
+- Causa probable del corte observado: comportamiento de sesión única del motor `SpeechRecognition` del navegador, cuya finalización puede depender de silencio o límites internos. Para lecturas largas queda registrado como trabajo futuro evaluar reconocimiento continuo o segmentación, sin autorizar su implementación en este incremento.
+- Pruebas de regresión: se añadieron casos de final único de diez palabras; dos segmentos con más de diez; provisional seguido de final; varios eventos finales; palabras adicionales; final dentro de 500 ms; evento posterior al cierre; procedencia y advertencia manual; etiquetas manual, browser y demo; WPM manual con `no_speech_detected`, `too_quiet`, voz estimada insuficiente y audio válido.
+- Verificación final: `npm.cmd run lint` terminó sin errores ni advertencias; `npm.cmd run typecheck` terminó con código 0; `npm.cmd test` aprobó 12 archivos y 117 pruebas; `npm.cmd run build` transformó 39 módulos y terminó con código 0; `git diff --check` no reportó errores.
+- Dependencias y Git durante la corrección: no se agregaron dependencias, no se hizo push y no se configuraron remotos.
+
+### Revalidación manual final y cierre
+
+- Fecha: 2026-07-18.
+- Estado: revalidación manual final completada correctamente por el responsable; no quedaron defectos bloqueantes del incremento 3.
+
+**Reconocimiento del navegador**
+
+- El aviso de privacidad apareció y exigió aceptación explícita.
+- La frase objetivo se reconoció correctamente; las omisiones y adiciones se detectaron respecto de esa frase.
+- El reconocimiento conservó frases de más de siete palabras mientras no hubo una pausa extensa.
+- Ante una pausa extensa, el navegador pudo finalizar la sesión única no continua.
+- No se observó truncación propia de Rimay ni aparecieron errores en la consola.
+
+**Entrada manual**
+
+- El resumen mostró `Comparación de texto introducido manualmente` y la fuente `Entrada manual`.
+- Se mostró: `Este texto fue proporcionado por el usuario. Rimay no verificó que corresponda al contenido de la grabación.`
+- Omisiones, adiciones y sustituciones se calcularon a partir del texto introducido manualmente.
+- La interfaz dejó claro que ese texto no fue transcrito ni verificado contra el audio.
+
+**Entrada manual con captura silenciosa**
+
+- Duración analizada: 5.6 s; RMS: 0.004; pico máximo: 0.026.
+- Tiempo estimado de voz: 0.0 s; proporción de silencio: 100 %.
+- Se mostraron las alertas de actividad de voz insuficiente y nivel de captura demasiado bajo.
+- WPM mostró: `WPM no disponible: no se detectó actividad de voz suficiente.`
+
+**Comportamiento general**
+
+- El análisis acústico continuó funcionando correctamente.
+- Un reconocimiento fallido o finalizado no eliminó la grabación y la entrada manual permaneció disponible.
+- El modo demo continuó claramente identificado como simulación.
+- No se observaron solicitudes propias de Rimay para enviar audio, texto o métricas; tampoco se persistieron esos datos.
+- La consola permaneció sin errores.
+- Descartar eliminó grabación, texto y métricas antes del siguiente intento.
+
+**Limitación conocida**
+
+`BrowserSpeechRecognizer` conserva `continuous: false` para el ejercicio corto actual. La capacidad `SpeechRecognition` del navegador puede finalizar la sesión única después de una pausa extensa o por criterios internos del agente de usuario. La revalidación confirmó que este cierre pertenece al comportamiento del navegador y que Rimay no introduce una truncación propia.
+
+**Cierre:** el incremento 3 queda completado. Este cierre no inicia ni autoriza coaching, adaptación, persistencia o el incremento 4.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |
@@ -286,6 +368,7 @@ Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan s
 | Red, permiso, silencio o cancelación impiden texto final | Errores tipados, conservar captura temporal y enfocar entrada manual. |
 | Reconocimiento impreciso de habla disártrica | Mostrarlo como aproximación, conservar procedencia, permitir edición manual y no convertir similitud en severidad. |
 | Resultados provisionales cambian o no finalizan | Mostrar estado provisional; sólo final o manual se vuelve resultado estable. |
+| La sesión no continua de Web Speech finaliza tras una pausa extensa o por criterios internos del navegador | Conservar la grabación, informar el cierre y mantener disponible la entrada manual; no atribuirlo a truncación propia de Rimay. |
 | Reglas parecen una evaluación clínica | Plantillas curadas, evidencia técnica, filtro editorial y aviso no clínico junto a métricas. |
 | Persistencia local queda corrupta o excede cuota | Validación runtime, máximo 20 sesiones y continuidad en memoria. |
 | Borrado local incompleto | Registro de claves propias, verificación posterior y mensaje de error si queda alguna; no usar `clear()`. |

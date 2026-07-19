@@ -4,6 +4,7 @@ import type {
 } from '../../domain/audio';
 
 interface AudioMetricsSummaryProps {
+  readonly hasUsableText?: boolean;
   readonly metrics: DeterministicMetrics;
 }
 
@@ -37,10 +38,16 @@ function formatPauses(metrics: DeterministicMetrics): string {
   )})`;
 }
 
-export function AudioMetricsSummary({ metrics }: AudioMetricsSummaryProps) {
+export function AudioMetricsSummary({
+  hasUsableText = false,
+  metrics,
+}: AudioMetricsSummaryProps) {
   const captureFlags = metrics.qualityFlags.filter(
     (flag) => flag !== 'transcription_missing',
   );
+  const displayedFlags = hasUsableText
+    ? metrics.qualityFlags.filter((flag) => flag !== 'transcription_missing')
+    : metrics.qualityFlags;
 
   return (
     <section
@@ -87,11 +94,11 @@ export function AudioMetricsSummary({ metrics }: AudioMetricsSummaryProps) {
         />
       </dl>
 
-      {metrics.qualityFlags.length > 0 && (
+      {displayedFlags.length > 0 && (
         <div className="mt-5">
           <h4 className="font-semibold">Observaciones técnicas</h4>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6">
-            {metrics.qualityFlags.map((flag) => (
+            {displayedFlags.map((flag) => (
               <li key={flag}>{FLAG_LABELS[flag]}</li>
             ))}
           </ul>

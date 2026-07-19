@@ -431,6 +431,13 @@ describe('AudioRecorderCard', () => {
     vi.stubGlobal('AudioContext', MockAudioContext);
     render(<AudioRecorderCard />);
 
+    await user.type(
+      screen.getByRole('textbox', {
+        name: /escribe lo que intentaste pronunciar/i,
+      }),
+      'Hoy camino con calma y confianza.',
+    );
+
     await user.click(screen.getByRole('button', { name: 'Iniciar prueba' }));
     act(() => {
       MockMediaRecorder.instances[0]?.emitData(
@@ -461,6 +468,16 @@ describe('AudioRecorderCard', () => {
     expect(
       within(summary).getByText(
         'Estas métricas son técnicas y experimentales. No representan una evaluación clínica.',
+      ),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Analizar texto' }));
+    const textSummary = screen.getByRole('region', {
+      name: 'Resumen técnico del texto',
+    });
+    expect(within(textSummary).getByText('180.0 palabras/min')).toBeInTheDocument();
+    expect(
+      within(textSummary).getByText(
+        'Estimación calculada con el número de palabras declarado por el usuario y la duración total de la captura.',
       ),
     ).toBeInTheDocument();
     expect(
