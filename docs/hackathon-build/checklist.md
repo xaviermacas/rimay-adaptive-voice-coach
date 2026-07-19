@@ -203,6 +203,8 @@ Resultado observado el 2026-07-18:
 
 ## Incremento 4 — Motor determinista de retroalimentación y adaptación
 
+**Estado: COMPLETADO — 2026-07-18**
+
 **Objetivo**
 
 Implementar `coach-rules-v1` como función pura con plantillas curadas, razones verificables y selección limitada al catálogo permitido.
@@ -217,17 +219,20 @@ Implementar `coach-rules-v1` como función pura con plantillas curadas, razones 
 **Aceptación**
 
 - `CoachInput` contiene `currentExercise`, métricas de audio y texto, procedencia, dificultad actual, `validAttemptCountBeforeCurrent`, `coveredExerciseTypesBeforeCurrent` y `allowedExercises: readonly Exercise[]`.
+- Cuando existen métricas textuales, `textMetrics.targetText` coincide exactamente con `currentExercise.targetText`; cualquier diferencia, incluida puntuación, devuelve `inconsistent_text_metrics` antes de usar esas métricas.
 - `validAttemptCountBeforeCurrent` es un entero entre `0` y `4` que cuenta sólo intentos válidos terminados antes del actual. Calidad bloqueante no lo incrementa; el intento actual válido completa la sesión cuando el contador anterior más uno es `5`.
 - La cobertura anterior contiene tipos únicos de intentos válidos previos en orden canónico. Para contadores `0`, `1` y `2` es respectivamente `[]`, `['word_repetition']` y `['word_repetition', 'phrase_repetition']`; con contador `3` o `4` contiene los tres tipos. Mientras el contador sea menor que `3`, `currentExercise.type` es el siguiente tipo obligatorio; una incoherencia produce `invalid_attempt_state`.
 - El motor añade conceptualmente `currentExercise.type` sólo para un intento válido y garantiza `word_repetition`, `phrase_repetition`, `guided_reading` en ese orden.
 - Si falta un tipo obligatorio y `allowedExercises` no contiene uno de ese tipo, `CoachResult` devuelve `missing_required_exercise_type`; no existe fallback.
 - La misma entrada produce el mismo `CoachResult` completo.
 - Cada salida declara `rulesVersion`, `ruleId`, `templateId`, acción, explicación y evidencia.
-- Los errores esperables usan la rama tipada `ok: false` con, como mínimo, `invalid_input`, `invalid_attempt_state`, `incompatible_algorithm_version`, `empty_allowed_exercises`, `duplicate_exercise_id`, `invalid_exercise`, `missing_required_exercise_type` e `inconsistent_audio_metrics`.
+- Los errores esperables usan la rama tipada `ok: false` con, como mínimo, `invalid_input`, `invalid_attempt_state`, `incompatible_algorithm_version`, `empty_allowed_exercises`, `duplicate_exercise_id`, `invalid_exercise`, `missing_required_exercise_type`, `inconsistent_audio_metrics` e `inconsistent_text_metrics`.
 - `qualityFlags` es la fuente canónica y usa exactamente `no_speech_detected`, `too_quiet`, `possible_clipping`, `audio_too_short` y `transcription_missing`. Los cuatro primeros o `silenceRatio >= 0.85` producen `repeat_current`; `transcription_missing`, ausencia de texto o similitud `null` no son mala captura.
 - Una contradicción entre un booleano acústico derivado y su flag produce `inconsistent_audio_metrics`.
 - Mensajes provienen sólo de plantillas curadas y no contienen afirmaciones diagnósticas.
 - Las plantillas dicen “texto reconocido” para `browser`, “texto introducido” para `manual` y “texto simulado” para `demo`; no atribuyen texto manual o demo al análisis de pronunciación y separan evidencia acústica de evidencia textual.
+- La regla `continue_follow_pause_cues` exige lectura guiada, `pauseCues.length > 0` y `pauseCount === 0`; sin marcas de pausa continúa con la siguiente prioridad.
+- Cada plantilla declara sólo evidencia que respalda su mensaje o explicación. `pauseCues` y `expectedMaxDurationMs` son claves válidas; las plantillas textuales usan sólo `textSimilarity` y la plantilla sin texto no declara evidencia textual.
 - La evaluación sigue este orden: validación, calidad acústica, contabilización conceptual del intento válido, finalización, cobertura, dificultad, foco, ordenamiento, selección y plantilla.
 - Sólo se seleccionan IDs de `allowedExercises`; lista vacía produce `empty_allowed_exercises` e IDs duplicados producen `duplicate_exercise_id`.
 - La política ordena copias sin mutar la entrada: tipo obligatorio pendiente, distancia a dificultad objetivo, evitar el ID actual, tipo en orden canónico, dificultad e ID mediante comparación ordinal con `<` y `>`, nunca `localeCompare`.
@@ -242,6 +247,7 @@ npm run lint
 npm run typecheck
 npm test -- coaching
 npm test -- adaptation
+npm test -- candidatePolicy
 npm test
 npm run build
 ```
@@ -253,6 +259,38 @@ Ejecutar fixtures de cada rama, límites exactos, frontera del quinto intento, c
 - Tramo A: contratos, validación, configuración y plantillas.
 - Tramo B: reglas, adaptación, selección y matriz adversarial.
 - Ambos tramos pertenecen al mismo incremento 4. No se crean commits parciales salvo autorización posterior y el incremento no se considera aceptado hasta completar ambos.
+
+**Evidencia de implementación automática — 2026-07-18**
+
+- [x] Los contratos preliminares incompatibles se sustituyeron por `ExerciseType`, `Difficulty`, `Exercise`, `CoachInput`, `CoachDecision`, `CoachError` y `CoachResult` canónicos; el motor usa el nombre real `DeterministicMetrics` para `audio-metrics-v1`.
+- [x] El tramo A implementó validación runtime sin mutación, configuración versionada, 11 plantillas estáticas `coach-templates-v1` y filtro editorial explícito. Su puerta intermedia terminó con `npm.cmd run typecheck` en código 0 y 39 pruebas dirigidas aprobadas.
+- [x] El tramo B implementó `coach-rules-v1`, dificultad 1–3, prioridad de focos, cobertura conceptual, quinto intento válido y política pura exportada de candidatos desde `src/domain/exercises/`.
+- [x] La matriz automática cubre umbrales exactos, flags individuales y combinados, errores tipados, cobertura, catálogo adversarial, procedencias, evidencia, determinismo, ausencia de fecha/aleatoriedad e inmutabilidad.
+- [x] Verificación final del código: lint y typecheck en código 0; coaching 84/84; adaptación 13/13; candidatos 10/10; suite completa 17 archivos y 211/211 pruebas; build de producción correcto.
+- [x] Revisión manual/editorial técnica realizada por el desarrollador sobre plantillas, ejemplos de decisión, evidencia y tono. Los hallazgos detectados se corrigieron antes de la revalidación final; no se realizó revisión clínica o profesional externa.
+
+**Corrección de hallazgos de validación manual/editorial — 2026-07-18**
+
+- [x] Se añadió `inconsistent_text_metrics` y la igualdad exacta de `targetText`, sin normalización silenciosa ni uso posterior de métricas incoherentes.
+- [x] La regla de pausas exige marcas no vacías y sus evidencias quedan limitadas a `pauseCount` y `pauseCues`.
+- [x] Las plantillas de similitud baja, ritmo, finalización, continuación con texto y continuación sin texto usan el copy y la evidencia editorial corregidos.
+- [x] El catálogo valida automáticamente la política exacta de evidencia, incluidas `pauseCues` y `expectedMaxDurationMs`.
+- [x] La matriz parametrizada de determinismo cubre cinco ramas con misma referencia, copia profunda, catálogo invertido e inmutabilidad.
+- [x] Verificación posterior a la corrección: lint y typecheck en código 0; coaching 104/104; adaptación 15/15; candidatos 10/10; suite completa 17 archivos y 231/231 pruebas; build de producción con 39 módulos transformados.
+- [x] La revalidación manual/editorial técnica final produjo el dictamen `APTO PARA CERRAR`; las 11 plantillas fueron aprobadas y no quedaron observaciones ni defectos materiales pendientes.
+
+**Evidencia de revalidación manual/editorial final y cierre — 2026-07-18**
+
+- [x] Las 11 plantillas fueron aprobadas. Browser usa “texto reconocido”, manual “texto introducido” y demo “texto simulado”; no aparece “Continúa y repite” ni lenguaje diagnóstico, de severidad, pronóstico, tratamiento, prescripción o clasificación clínica.
+- [x] Cuando existen métricas textuales, `textMetrics.targetText` debe ser idéntico a `currentExercise.targetText`, incluida la puntuación. Cualquier diferencia devuelve `inconsistent_text_metrics` antes de dificultad, foco, plantilla, evidencia o selección; `textMetrics: null` no activa esta validación.
+- [x] `continue_follow_pause_cues` exige conjuntamente `currentExercise.type === 'guided_reading'`, `currentExercise.pauseCues.length > 0` y `audioMetrics.pauseCount === 0`; ante pausas, duración extensa y similitud baja prevalece el foco de pausas.
+- [x] Explicaciones y evidencias quedaron alineadas: pausas usa sólo `pauseCount` y `pauseCues`; ritmo, `totalDurationMs` y `expectedMaxDurationMs`; finalización, `validAttemptCountBeforeCurrent`, `qualityFlags` y `silenceRatio`; las plantillas textuales, sólo `textSimilarity`; la variante sin texto no declara evidencia textual.
+- [x] La matriz reforzada confirmó en cinco ramas dos evaluaciones de la misma referencia, copia profunda, catálogo invertido, igualdad profunda y ausencia de mutación del input y sus arrays.
+- [x] La auditoría de pureza no encontró en producción red, persistencia, reloj, aleatoriedad, APIs del navegador, React, Supabase, OpenAI ni `localeCompare`. Las referencias a fecha y aleatoriedad permanecen sólo como guardas negativas en pruebas.
+- [x] Verificación final: lint y typecheck en código 0; coaching 4 archivos y 104/104 pruebas; adaptación 1 archivo y 15/15; candidatos 1 archivo y 10/10; suite completa 17 archivos y 231/231; build de producción con 39 módulos transformados; `git diff --check` en código 0 sin errores de whitespace.
+- [x] La revisión fue técnica y editorial y la realizó el desarrollador. No hubo revisión clínica o profesional externa; el filtro léxico no sustituye una revisión profesional y los umbrales son reglas de interacción no clínicamente validadas.
+
+**Cierre:** el incremento 4 queda completado con dictamen `APTO PARA CERRAR`. El incremento 5 no se inició ni se autoriza mediante este cierre.
 
 ## Incremento 5 — Recorrido vertical de un intento
 

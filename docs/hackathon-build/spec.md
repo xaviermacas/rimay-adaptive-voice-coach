@@ -318,6 +318,8 @@ type CoachAction = 'repeat_current' | 'continue' | 'complete_session'
 type MetricEvidenceKey =
   | keyof AudioMetrics
   | keyof TextMetrics
+  | 'pauseCues'
+  | 'expectedMaxDurationMs'
   | 'currentDifficulty'
   | 'validAttemptCountBeforeCurrent'
 
@@ -354,6 +356,7 @@ type CoachErrorCode =
   | 'invalid_exercise'
   | 'missing_required_exercise_type'
   | 'inconsistent_audio_metrics'
+  | 'inconsistent_text_metrics'
 
 interface CoachError {
   code: CoachErrorCode
@@ -370,6 +373,8 @@ type CoachResult =
 `coveredExerciseTypesBeforeCurrent` contiene únicamente tipos cubiertos por intentos válidos anteriores, sin duplicados y en orden canónico. Para contadores `0`, `1` y `2`, debe ser respectivamente `[]`, `['word_repetition']` y `['word_repetition', 'phrase_repetition']`; con contador `3` o `4` contiene los tres tipos. Mientras el contador sea menor que `3`, `currentExercise.type` debe ser el siguiente tipo del orden. Cualquier incoherencia produce `invalid_attempt_state`. Para un intento actual válido, el motor calcula internamente la cobertura posterior añadiendo `currentExercise.type`.
 
 `shortFeedback` y `explanation` salen exclusivamente de plantillas curadas. `selectedExerciseId` debe ser `null` para `repeat_current` y `complete_session`, o pertenecer a `allowedExercises` para `continue`. Los errores esperables se devuelven como `CoachResult`; no se expresan como decisiones parciales ni mediante un ID inventado.
+
+Cuando `textMetrics` no es `null`, `textMetrics.targetText` debe ser exactamente igual a `currentExercise.targetText`. La comparación contractual no normaliza, corrige ni elimina puntuación. Una diferencia devuelve `inconsistent_text_metrics` antes de usar esas métricas para dificultad, foco, evidencia o selección.
 
 ### 6.5 Sesiones y resumen
 
@@ -620,6 +625,7 @@ La misma entrada serializable debe producir exactamente el mismo `CoachResult`, 
    - IDs repetidos: `duplicate_exercise_id`;
    - ejercicio actual o permitido inválido: `invalid_exercise`;
    - contradicción entre un booleano acústico derivado y su flag: `inconsistent_audio_metrics`.
+   - `targetText` textual distinto del ejercicio actual: `inconsistent_text_metrics`.
 2. Evaluar calidad acústica desde `qualityFlags`. Si contiene `no_speech_detected`, `too_quiet`, `possible_clipping` o `audio_too_short`, o si `silenceRatio >= 0.85`, devolver `repeat_current`, foco `clear_capture` y una plantilla de captura. El intento no es válido, no incrementa `validAttemptCountBeforeCurrent` y no añade cobertura. La repetición sólo ocurre si el usuario la elige.
 3. Si la calidad no es bloqueante, contabilizar conceptualmente el intento actual como válido: `nextValidAttemptCount = validAttemptCountBeforeCurrent + 1` y cobertura posterior igual a los tipos anteriores más `currentExercise.type`.
 4. Si `nextValidAttemptCount === 5`, devolver `complete_session`, sin siguiente ejercicio. Una captura bloqueante en esta frontera ya terminó en el paso 2 y nunca completa la sesión.
@@ -631,7 +637,7 @@ La misma entrada serializable debe producir exactamente el mismo `CoachResult`, 
    - similitud mayor de `0.85` y sin flags de captura: aumentar una, máximo 3;
    - en otro caso: mantener.
 7. Seleccionar foco de plantilla en este orden:
-   - lectura guiada con `pauseCount === 0`: `follow_pause_cues`;
+   - lectura guiada con `pauseCues.length > 0` y `pauseCount === 0`: `follow_pause_cues`;
    - duración mayor a `expectedMaxDurationMs`: `steady_pace`;
    - similitud menor de `0.65`: `repeat_calmly`;
    - resto: `continue`.
@@ -648,6 +654,9 @@ Los umbrales son reglas de interacción del demo y no están clínicamente valid
 - Cada plantilla tiene ID estable, foco, acción permitida, texto breve y explicación.
 - El texto visible no contiene diagnóstico, severidad, pronóstico, prescripción, comparación poblacional o promesas.
 - La plantilla no inserta valores que no existan en la evidencia.
+- Cada `evidenceKey` respalda una afirmación explícita de `shortFeedback` o `explanation`; los criterios internos usados para ordenar candidatos no se exponen sólo por intervenir en la selección.
+- `pauseCues` y `expectedMaxDurationMs` son evidencias editoriales válidas del ejercicio actual. La plantilla de pausas declara exactamente `pauseCount` y `pauseCues`; la de ritmo declara exactamente `totalDurationMs` y `expectedMaxDurationMs`.
+- Las plantillas con texto declaran únicamente `textSimilarity`. La plantilla sin texto declara `qualityFlags`, `silenceRatio` y `currentDifficulty`, sin evidencia textual.
 - Los números de métricas se renderizan desde los contratos, no desde texto libre.
 - La procedencia se nombra exactamente como “texto reconocido” para `browser`, “texto introducido” para `manual` y “texto simulado” para `demo`.
 - Una plantilla manual o demo no atribuye el texto al análisis de pronunciación. La evidencia acústica y textual se mantiene separada y ninguna se presenta como validación de la otra.
@@ -793,9 +802,11 @@ No se prevén carpetas `supabase/`, `api/`, `functions/` o adaptadores OpenAI en
 - Reglas de coaching para cada prioridad, umbral exacto, combinación de señales y frontera del quinto intento con calidad válida o bloqueante.
 - Validación de `validAttemptCountBeforeCurrent` entre `0` y `4`, cobertura anterior coherente y cálculo de cobertura posterior sólo para un intento válido.
 - Cada rama tipada de `CoachResult`, incluidas versiones incompatibles, lista vacía, IDs duplicados, ejercicio inválido, tipo obligatorio ausente y métricas acústicas inconsistentes.
+- Correspondencia exacta entre `textMetrics.targetText` y `currentExercise.targetText`, incluidas diferencias de palabra o puntuación, y ausencia de validación cuando las métricas son `null`.
 - Orden estable de candidatos sobre copias: cobertura, distancia, ID actual, orden canónico de tipo, dificultad e ID ordinal sin `localeCompare`.
 - Catálogo adversarial, rechazo de IDs no permitidos, ausencia de fallback para tipo obligatorio y repetición del ejercicio actual cuando es el único candidato válido.
 - Plantillas sin lenguaje clínico, procedencia textual correcta, evidencia acústica/textual separada y resultados idénticos ante la misma entrada.
+- Política exacta de evidencia por plantilla, precondición no vacía de `pauseCues` y matriz de determinismo con misma referencia, copia profunda y catálogo invertido sin mutación.
 - Resumen con referencias existentes y orden estable.
 - Serialización que rechaza audio, objetos del navegador y texto provisional.
 - Eliminación completa de claves propias sin usar `clear()`.

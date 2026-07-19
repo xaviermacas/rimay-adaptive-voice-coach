@@ -327,6 +327,83 @@ La diferencia pequeña entre duración capturada y duración decodificada se con
 - Procedencia: las plantillas distinguen “texto reconocido”, “texto introducido” y “texto simulado”; nunca atribuyen texto manual o demo al análisis de pronunciación y mantienen separadas la evidencia acústica y textual.
 - División: el incremento 4 permanece como un único incremento formal, con tramo A de contratos, validación, configuración y plantillas, y tramo B de reglas, adaptación, selección y matriz adversarial. No se autorizan commits parciales mediante esta resolución.
 
+## Registro de implementación automática del incremento 4
+
+- Fecha de ejecución: 2026-07-18.
+- Estado: ambos tramos fueron implementados y verificados automáticamente; la aceptación manual/editorial del responsable permanece pendiente. No se inició el incremento 5 y no se creó commit.
+- Alcance aplicado: dominio TypeScript puro para contratos, validación, plantillas, filtro editorial, reglas, adaptación y candidatos. No se modificaron React, `App.tsx`, captura, reconocimiento, interfaz, persistencia, resumen ni servicios runtime.
+- Dependencias: no se agregaron ni actualizaron paquetes; `package.json` y `package-lock.json` permanecen sin cambios.
+- Migración contractual: `ExerciseType` usa `word_repetition`, `phrase_repetition` y `guided_reading`; `Difficulty` queda limitada a `1 | 2 | 3`; `Exercise` incorpora `instruction`, `pauseCues` y `expectedMaxDurationMs`. Se retiraron `CoachRequest`, `CoachResponse`, el proveedor asíncrono `Coach` y los contratos preliminares de sesión/resumen que no correspondían a este incremento.
+- Contrato acústico real: `CoachInput.audioMetrics` usa directamente `DeterministicMetrics`; no se creó un alias `AudioMetrics`. Las versiones compatibles son exactamente `audio-metrics-v1`, `text-metrics-v1`, `coach-rules-v1` y `coach-templates-v1`.
+- Validación: la frontera acepta `unknown`, rechaza números no finitos, ejercicios y pausas inválidos, contador/cobertura incoherentes, fuentes textuales contradictorias, versiones incompatibles, flags desconocidos o repetidos, catálogo vacío, IDs duplicados y contradicción entre `possibleClipping` y `possible_clipping`. Cuando hay métricas textuales, exige igualdad exacta entre su `targetText` y el del ejercicio actual; una diferencia devuelve `inconsistent_text_metrics` antes de usar esas métricas. No muta la entrada.
+- Calidad y prioridad: `audio_too_short`, `no_speech_detected`, `too_quiet`, `possible_clipping` o `silenceRatio >= 0.85` devuelven `repeat_current` antes de evaluar el quinto intento. `transcription_missing` y ausencia de texto no bloquean.
+- Adaptación: similitud menor de `0.65` reduce una dificultad, `0.65`–`0.85` inclusive mantiene, mayor de `0.85` aumenta una y `null` mantiene; el resultado se acota a 1–3. El foco prioriza lectura guiada con `pauseCues.length > 0` y cero pausas, duración superior, similitud baja y continuación, en ese orden.
+- Cobertura y finalización: el intento válido actual se suma conceptualmente al prefijo canónico; si completa el quinto devuelve `complete_session`. Si aún falta un tipo obligatorio, sólo se consideran candidatos de ese tipo y su ausencia devuelve `missing_required_exercise_type`.
+- Candidatos: `orderExerciseCandidates` y `selectExerciseCandidate` están exportadas desde `src/domain/exercises/`. Ordenan una copia por tipo obligatorio pendiente, distancia a dificultad, preferencia por ID distinto al actual, tipo canónico, dificultad e ID ordinal con `<` y `>`.
+- Plantillas: el catálogo contiene `capture-clear-v1`, `session-complete-v1`, `pause-cues-v1`, `steady-pace-v1`, tres variantes `repeat-text-*-v1`, tres variantes `continue-text-*-v1` y `continue-no-text-v1`. Browser dice “texto reconocido”, manual “texto introducido”, demo “texto simulado” y la variante sin texto no declara coincidencia ni evidencia textual. La política automática exige evidencia exacta por plantilla; `pauseCues` y `expectedMaxDurationMs` son claves válidas, y las plantillas textuales sólo declaran `textSimilarity`.
+- Filtro editorial: los patrones explícitos detectan diagnóstico, severidad, pronóstico, recuperación o cambio clínico, tratamiento, prescripción, clasificación de la persona, aprobación/desaprobación, medición clínica y adherencia. Todas las plantillas pasan y un fixture deliberadamente prohibido se rechaza. Este filtro no sustituye revisión profesional.
+- Determinismo: el motor no consulta fecha, aleatoriedad, navegador, red o estado global mutable; no usa `localeCompare`; la misma entrada y catálogos equivalentes en distinto orden producen igualdad profunda sin mutar entrada o catálogo.
+
+### Matriz para validación manual/editorial
+
+| Fixture | Regla esperada | Acción y plantilla | Evidencia declarada |
+| --- | --- | --- | --- |
+| Cualquier flag bloqueante o `silenceRatio` igual a `0.85` | `capture_quality_blocking` | `repeat_current`, `capture-clear-v1`, sin siguiente ID | `qualityFlags`, `silenceRatio` |
+| Cuatro intentos previos y captura válida | `complete_fifth_valid_attempt` | `complete_session`, `session-complete-v1`, sin siguiente ID | `validAttemptCountBeforeCurrent`, `qualityFlags`, `silenceRatio` |
+| Lectura guiada con `pauseCues.length > 0` y `pauseCount === 0` | `continue_follow_pause_cues` | `continue`, `pause-cues-v1` | `pauseCount`, `pauseCues` |
+| Duración mayor que `expectedMaxDurationMs` | `continue_steady_pace` | `continue`, `steady-pace-v1` | `totalDurationMs`, `expectedMaxDurationMs` |
+| Similitud menor de `0.65` | `continue_repeat_calmly` | `continue`, plantilla de siguiente actividad según procedencia | `textSimilarity` |
+| Resto con texto coherente | `continue_default` | `continue`, plantilla de procedencia | `textSimilarity` |
+| Resto sin texto | `continue_default` | `continue`, `continue-no-text-v1` | `qualityFlags`, `silenceRatio`, `currentDifficulty` |
+
+La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirmar la procedencia browser/manual/demo/sin texto, comparar las evidencias de la tabla con los resultados de fixtures, revisar los ejemplos de quinto intento y prioridades combinadas, y examinar los catálogos adversariales con orden alterado, tipo obligatorio ausente, único candidato actual e IDs numéricos/mayúsculos/minúsculos. También debe revisar el diff completo y las búsquedas negativas de red, persistencia, aleatoriedad y lenguaje clínico. No se afirma revisión profesional externa hasta que ocurra.
+
+### Verificación automática
+
+- Puerta del tramo A: `npm.cmd run typecheck`, código 0; validación y plantillas, 2 archivos y 39/39 pruebas.
+- `npm.cmd run lint`: código 0, sin errores ni advertencias.
+- `npm.cmd run typecheck`: código 0.
+- `npm.cmd test -- coaching`: 4 archivos y 84/84 pruebas.
+- `npm.cmd test -- adaptation`: 1 archivo y 13/13 pruebas.
+- `npm.cmd test -- candidatePolicy`: 1 archivo y 10/10 pruebas.
+- `npm.cmd test`: 17 archivos y 211/211 pruebas.
+- `npm.cmd run build`: código 0; 39 módulos transformados y build estático generado correctamente.
+- Búsqueda estática de producción: sin `fetch`, almacenamiento web, red, Supabase, OpenAI, `Math.random`, `Date.now`, UUID runtime ni `localeCompare` en los módulos nuevos.
+- `git diff --check`: código 0, sin errores de whitespace; Git sólo informó la conversión futura de LF a CRLF en archivos ya modificados.
+
+## Corrección de hallazgos manuales/editoriales del incremento 4
+
+- Fecha de ejecución: 2026-07-18.
+- Estado: los hallazgos se corrigieron en el dominio puro y sus pruebas; la revalidación manual/editorial final del responsable sigue pendiente. El incremento 4 no se cierra y el incremento 5 no se inició.
+- Correspondencia textual: la causa era la ausencia de una guarda entre el objetivo usado por `text-metrics-v1` y el ejercicio actual. `CoachErrorCode` incorpora `inconsistent_text_metrics`; una comparación exacta de `targetText`, incluida puntuación, detiene la evaluación antes de dificultad, foco, evidencia o candidatos.
+- Pausas: la causa era que el foco sólo comprobaba lectura guiada y cero pausas. `continue_follow_pause_cues` exige además `pauseCues.length > 0`; su mensaje habla de pausas indicadas y declara exactamente `pauseCount` y `pauseCues`.
+- Similitud baja: se retiró la orden ambigua anterior. Las tres procedencias indican que la acción corresponde a la siguiente actividad, conservan su etiqueta textual y declaran sólo `textSimilarity`.
+- Ritmo: la explicación compara duración total y máximo esperado; la evidencia queda limitada a `totalDurationMs` y `expectedMaxDurationMs`.
+- Finalización: la explicación declara captura sin alertas bloqueantes y quinto intento válido; la evidencia queda en `validAttemptCountBeforeCurrent`, `qualityFlags` y `silenceRatio`.
+- Sin texto y continuación textual: la variante sin texto declara captura válida y dificultad mantenida con `qualityFlags`, `silenceRatio` y `currentDifficulty`; las variantes textuales de continuación declaran únicamente `textSimilarity`.
+- Política editorial: el validador del catálogo comprueba la lista exacta de evidencias por `templateId`, además de claves desconocidas, y mantiene el filtro de lenguaje clínico y las etiquetas browser/manual/demo.
+- Determinismo reforzado: una matriz parametrizada cubre `continue_default` browser, `continue_repeat_calmly` manual, `continue_follow_pause_cues`, `capture_quality_blocking` y `missing_required_exercise_type`; en cada rama compara dos evaluaciones de la misma referencia, una copia profunda y el catálogo invertido, y verifica inmutabilidad.
+- Verificación posterior a la corrección: `npm.cmd run lint` y `npm.cmd run typecheck` terminaron con código 0; `npm.cmd test -- coaching` aprobó 4 archivos y 104/104 pruebas; `npm.cmd test -- adaptation`, 1 archivo y 15/15; `npm.cmd test -- candidatePolicy`, 1 archivo y 10/10; `npm.cmd test`, 17 archivos y 231/231; `npm.cmd run build`, 39 módulos transformados y build estático correcto.
+- Dependencias y alcance: no se modificaron paquetes, React, captura, reconocimiento, red, persistencia, resumen ni componentes; no se creó commit, no se hizo push y no se configuraron remotos.
+
+## Revalidación manual/editorial final y cierre del incremento 4
+
+- Fecha: 2026-07-18.
+- Dictamen: `APTO PARA CERRAR`.
+- Estado: el incremento 4 queda completado. No quedaron plantillas observadas ni defectos materiales pendientes y no se inició el incremento 5.
+- Alcance de la revisión: revisión técnica y editorial realizada por el desarrollador sobre contratos, 11 plantillas, ejemplos de decisión, evidencia, prioridades, candidatos, determinismo y pureza. No se realizó revisión clínica o profesional externa.
+- Plantillas: las 11 plantillas fueron aprobadas. Browser usa “texto reconocido”, manual “texto introducido” y demo “texto simulado”; la variante sin texto no declara evidencia textual. No aparece “Continúa y repite” ni lenguaje de diagnóstico, severidad, pronóstico, tratamiento, prescripción o clasificación clínica.
+- Correspondencia textual: `textMetrics.targetText` idéntico a `currentExercise.targetText` se acepta. Un objetivo de otro ejercicio, una palabra distinta o una diferencia de puntuación devuelve `inconsistent_text_metrics`. La evaluación termina antes de dificultad, foco, plantilla, evidencia o candidato; `textMetrics: null` queda fuera de esta guarda.
+- Pausas: `continue_follow_pause_cues` exige conjuntamente `currentExercise.type === 'guided_reading'`, `currentExercise.pauseCues.length > 0` y `audioMetrics.pauseCount === 0`. Si coinciden pausas, duración extensa y similitud baja, prevalece el foco de pausas.
+- Evidencia: `pause-cues-v1` usa sólo `pauseCount` y `pauseCues`; `steady-pace-v1`, `totalDurationMs` y `expectedMaxDurationMs`; `session-complete-v1`, `validAttemptCountBeforeCurrent`, `qualityFlags` y `silenceRatio`; las seis plantillas textuales, sólo `textSimilarity`; `continue-no-text-v1` no declara evidencia textual. Cada explicación formula la observación respaldada por esas claves.
+- Prioridades y candidatos: calidad bloqueante prevalece sobre el quinto intento; el quinto intento válido produce `complete_session`; un tipo obligatorio ausente devuelve `missing_required_exercise_type` sin fallback. Todo ID seleccionado pertenece a `allowedExercises`; catálogos desordenados o invertidos mantienen la decisión; el candidato actual puede reutilizarse cuando la cobertura está completa; IDs duplicados devuelven `duplicate_exercise_id`; el orden de IDs es ordinal e independiente del locale.
+- Determinismo reforzado: `continue_default`, `continue_repeat_calmly`, `continue_follow_pause_cues`, `capture_quality_blocking` y `missing_required_exercise_type` produjeron igualdad profunda con dos evaluaciones de la misma referencia, copia profunda completa y catálogo invertido. El input, `allowedExercises`, `pauseCues`, `qualityFlags` y las copias permanecieron sin mutación.
+- Pureza: los módulos de producción del incremento 4 no contienen red, persistencia, reloj, aleatoriedad, APIs del navegador, React, Supabase, OpenAI ni `localeCompare`. `Date.now` y `Math.random` aparecen únicamente en pruebas como guardas negativas que fallarían si el motor intentara consultarlos.
+- Verificación automática final: `npm.cmd run lint`, código 0; `npm.cmd run typecheck`, código 0; `npm.cmd test -- coaching`, 4 archivos y 104/104 pruebas; `npm.cmd test -- adaptation`, 1 archivo y 15/15; `npm.cmd test -- candidatePolicy`, 1 archivo y 10/10; `npm.cmd test`, 17 archivos y 231/231; `npm.cmd run build`, código 0 y 39 módulos transformados; `git diff --check`, código 0 sin errores de whitespace y sólo avisos informativos de futura conversión LF a CRLF.
+- Dependencias: `package.json` y `package-lock.json` permanecen sin cambios; no se agregaron ni actualizaron paquetes.
+- Limitaciones: el filtro léxico automatizado reduce el riesgo editorial, pero no sustituye revisión profesional. Los umbrales acústicos, textuales y adaptativos son reglas deterministas de interacción para la demostración y no están clínicamente validados; no diagnostican, clasifican severidad, pronostican ni prescriben tratamiento.
+- Cierre de alcance: no se modificaron plantillas, contratos, reglas, prioridades, fórmulas o umbrales durante el cierre. No se añadieron React, recorrido de práctica, `SpeechSynthesis`, persistencia, backend, Supabase u OpenAI. No se hizo push ni se configuraron remotos.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |

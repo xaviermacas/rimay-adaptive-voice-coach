@@ -1,14 +1,8 @@
 export type {
-  Attempt,
-  CoachEvidence,
-  CoachRequest,
-  CoachResponse,
   Difficulty,
   Exercise,
   ExerciseType,
-  ProfessionalSummary,
   RecordingMetadata,
-  Session,
   UserRole,
 } from './domain';
 export type {
@@ -26,8 +20,6 @@ export type {
   DeterministicMetrics,
 } from '../audio/types';
 export type {
-  Coach,
-  SessionRepository,
   SpeechOutput,
 } from './providers';
 export type {
