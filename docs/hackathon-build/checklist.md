@@ -422,24 +422,107 @@ Recorrer demo sin red, browser y manual; inspeccionar red, consola y almacenamie
 
 ## Incremento 6 — Tres ejercicios y voz accesible
 
+**Estado: NO INICIADO — BLOQUEOS DOCUMENTALES RESUELTOS EL 2026-07-19**
+
 **Objetivo**
 
-Incorporar el catálogo ficticio, los tres tipos obligatorios, progreso inicial e instrucciones mediante `SpeechSynthesis`.
+Sustituir el fixture temporal del incremento 5 por el catálogo local final del MVP inicial, compuesto exactamente por palabra, frase y lectura guiada, e integrar instrucciones y feedback escritos y hablados mediante `SpeechSynthesis` con controles explícitos y fallback textual accesible.
+
+El incremento conserva un solo recorrido y termina en `selection_preview`. No incluye una sesión de cinco intentos, segunda captura después de continuar, historial, adaptación completa, persistencia, selector visible de voces, pausa/reanudación, vista profesional, backend, Supabase u OpenAI.
+
+**Catálogo exacto**
+
+| ID | Tipo | Dificultad | Instrucción | Texto objetivo | Pausas | Duración máxima esperada |
+| --- | --- | ---: | --- | --- | --- | ---: |
+| `practice-word-casa` | `word_repetition` | 1 | “Pronuncia la palabra visible cuando estés listo.” | `casa` | `[]` | `3_000 ms` |
+| `practice-phrase-calm` | `phrase_repetition` | 2 | “Pronuncia la frase visible cuando estés listo.” | `Camino con calma.` | `[]` | `6_000 ms` |
+| `practice-guided-calm` | `guided_reading` | 3 | “Lee el texto visible y haz una pausa donde aparece la indicación.” | `La mañana está tranquila, camino con calma.` | `[25]` | `12_000 ms` |
+
+La lectura guiada está en NFC; la coma ocupa el índice UTF-16 `24` y el offset `25` marca la frontera inmediatamente posterior. La secuencia readonly es `practice-word-casa` → `practice-phrase-calm` → `practice-guided-calm`, equivalente a palabra → frase → lectura guiada. La distribución 1–2–3 pertenece a este catálogo ficticio de tres entradas y no exige una matriz de nueve ejercicios en bibliotecas futuras.
+
+**Contratos, validación y orden**
+
+- Se mantiene `Exercise` sin agregar campos.
+- `pauseCues` usa offsets UTF-16 base cero sobre `targetText` exacto en NFC, compatibles con `String.prototype.slice`, posteriores a puntuación, únicos, estrictamente crecientes, mayores que cero, menores que la longitud y sin dividir pares sustitutos.
+- Palabra y frase usan `pauseCues: []`; lectura guiada exige al menos una marca visible como “Pausa” que no modifica el `targetText` contractual ni asigna una duración clínica.
+- Una validación pura recibe `unknown` y devuelve éxito tipado o una lista estructurada de hallazgos. Comprueba array no vacío, exactamente tres entradas, contrato completo, un tipo por ejercicio, IDs no vacíos y únicos, dificultades, texto NFC no vacío, duraciones enteras/finitas/positivas/`<= 60_000`, pausas, secuencia, orden, seguridad editorial e inmutabilidad.
+- El orden canónico es palabra, frase, lectura guiada, dificultad e ID ordinal mediante `<` y `>`. No usa `localeCompare`, fecha, UUID o aleatoriedad.
+- Catálogo, ejercicios, `pauseCues` y secuencia son readonly.
+
+**Integración con el incremento 5 y coaching**
+
+- El primer ejercicio sustituye el fixture temporal actual y el catálogo completo sustituye `TEMPORARY_PRACTICE_CATALOG` como `allowedExercises`.
+- Los fixtures demo se separan del catálogo y conservan su procedencia simulada.
+- `validAttemptCountBeforeCurrent` permanece `0` y `coveredExerciseTypesBeforeCurrent` permanece `[]`.
+- Una palabra válida selecciona la frase; una prueba de dominio demuestra que una frase válida con palabra cubierta puede seleccionar lectura guiada.
+- No cambia `coach-rules-v1`; faltante de tipo conserva `missing_required_exercise_type` y un ID ajeno conserva `selected_exercise_not_found`.
+- Cambiar voces no recalcula `CoachInput` o `CoachDecision`; el snapshot permanece estable.
+- `selection_preview` continúa terminal y no inicia otra captura, reconocimiento, contador, sesión o evaluación.
+- “Ejercicio 1 de 3”, “Ejercicio 2 de 3” y su equivalente para lectura describen sólo progreso presentacional de la secuencia inicial, no intentos válidos o historial.
+
+**Salida hablada**
+
+El contrato canónico es:
+
+```ts
+interface SpeechOutput {
+  speak(text: string): Promise<void>
+  stop(): void
+  isAvailable(): boolean
+}
+```
+
+Idioma y voz se resuelven internamente. No se conserva como contrato paralelo `speak(text, language)` ni `isSupported()` y no se exponen objetos del navegador en el dominio.
+
+- Puede hablar exactamente `Exercise.instruction` y `shortFeedback + " " + explanation`, todos visibles.
+- No habla texto reconocido, manual o simulado, `targetText` por separado, métricas, evidencia, IDs, versiones o avisos completos.
+- Parámetros fijos: `rate = 1`, `pitch = 1`, `volume = 1`; idioma preferido `es-EC`.
+- Cada bloque ofrece escuchar, detener mientras habla y repetir, distinguiendo repetir voz de repetir intento.
+- No existe autoplay, pausa/reanudación, selector visible o parámetros configurables.
+
+**Selección y ciclo de vida de voz**
+
+- Preferencia: voz local `es-EC`, cualquier `es-EC`, voz local `es-*`, cualquier `es-*`.
+- Dentro de cada grupo: `default`, `voiceURI`, `lang` y `name` ordinales. La identidad combina esos tres últimos campos; no usa `localeCompare` y no se persiste.
+- `getVoices()` puede comenzar vacío; se escucha `voiceschanged`, se vuelve a seleccionar desde la lista actual y no se conservan objetos de voz obsoletos.
+- Si no existe voz española, no se usa silenciosamente otro idioma: el texto permanece visible, se anuncia indisponibilidad y el recorrido continúa.
+- Sólo existe una locución activa. Antes de hablar se cancela la anterior; repetición rápida conserva sólo la última y los eventos tardíos se ignoran mediante generación.
+- Cancelaciones esperadas no son errores; errores reales son no bloqueantes.
+- Se cancela voz antes de micrófono, reconocimiento, repetir intento, descartar, continuar, cambiar ejercicio, entrar en error o desmontar. Se retiran listeners al desmontar.
+- Eventos de síntesis y `voiceschanged` no mueven foco ni recalculan coaching.
+
+**Privacidad y accesibilidad**
+
+- Sólo se entregan al agente de síntesis instrucciones y feedback ficticio visibles; nunca texto del usuario, métricas o IDs.
+- Sin `fetch`, telemetría o almacenamiento. Se prefiere `localService`, sin prometer que toda voz sea local u offline; una voz puede ser gestionada remotamente por el navegador.
+- Demo sigue sin micrófono, grabación, reconocimiento o audio del usuario. La voz opcional no convierte fixtures en mediciones reales.
+- Texto equivalente, botones nativos, teclado, foco visible, controles adecuados, estado breve, detener mientras habla, indicadores textuales de pausa, sin autoplay o autoavance, zoom 200 %, reflow, reduced motion, errores recuperables y lector de pantalla.
+- No se anuncia cada evento interno de síntesis.
 
 **Archivos previstos**
 
-- Catálogo en `src/domain/exercises/`.
-- Componentes de instrucción y lectura guiada.
-- Adaptador `SpeechOutput` del navegador.
-- Pruebas de catálogo, cobertura inicial y controles de voz.
+- Catálogo, validación y secuencia en `src/domain/exercises/`.
+- Contrato `SpeechOutput` reconciliado y adaptador browser aislado.
+- Hook de voz y componentes `ExerciseInstruction`, lectura guiada y `SpeechControls`.
+- Separación de fixtures demo y sustitución de imports temporales en práctica.
+- Pruebas de catálogo, coaching, salida hablada, integración y accesibilidad.
 
 **Aceptación**
 
-- Los intentos 1, 2 y 3 son palabra, frase y lectura guiada respectivamente.
-- Cada ejercicio tiene contenido ficticio, dificultad válida y duración esperada.
-- Toda voz tiene texto visible y botones escuchar, detener y repetir.
-- Falta de voz española no bloquea el flujo.
-- No hay reproducción, reconocimiento o avance automático.
+- Existen exactamente tres ejercicios válidos y los tres tipos están presentes una vez.
+- La secuencia inicial es palabra, frase y lectura guiada; sus dificultades son 1, 2 y 3.
+- El catálogo final sustituye el fixture temporal y mantiene separados los fixtures demo.
+- Palabra puede seleccionar frase y frase con palabra cubierta puede seleccionar lectura.
+- `pauseCues` cumple la convención UTF-16, se valida y se presenta con texto sin alterar `targetText`.
+- Instrucciones y feedback permanecen siempre visibles; sólo esos contenidos pueden sintetizarse.
+- Ninguna voz comienza automáticamente. Escuchar, detener y repetir funcionan y sólo una locución queda activa.
+- La voz se cancela antes de iniciar micrófono o reconocimiento y antes de cada transición destructiva o terminal.
+- Una voz española se selecciona de forma determinista; ausencia o error de voz no bloquea browser, manual o demo.
+- No se utiliza otro idioma silenciosamente ni se persiste una preferencia de voz.
+- `selection_preview` sigue terminal; no se inicia otra captura, sesión, historial o adaptación completa.
+- `coach-rules-v1`, audio, texto, plantillas y umbrales cerrados no cambian.
+- No se agregan dependencias, servicios, red propia, backend, Supabase u OpenAI.
+- El catálogo recibe revisión técnica/editorial del desarrollador; no se afirma revisión clínica externa y el filtro automático no sustituye revisión profesional.
 
 **Verificación**
 
@@ -452,7 +535,14 @@ npm test
 npm run build
 ```
 
-Recorrido manual con voz disponible y simulada como ausente; verificar teclado y anuncios.
+Recorrer demo, browser y manual con voz española disponible, carga tardía y simulada como ausente. Verificar repetición rápida, cancelación antes del micrófono, cambios de estado, desmontaje, Console, Network, Storage, teclado, foco, lector de pantalla, zoom 200 %, reflow y anuncios. Confirmar que no se persiste voz y que las duraciones y pausas se presentan como reglas de interacción no clínicamente validadas.
+
+**División interna del incremento**
+
+- Tramo A — Catálogo y contratos: reconciliar `SpeechOutput`, catálogo, validación, secuencia, `pauseCues`, fixtures demo separados y pruebas `exercises`.
+- Tramo B — Núcleo de voz: selección española, adaptador browser, hook, estados, ciclo de vida y pruebas `speech-output`.
+- Tramo C — Integración accesible: instrucción, lectura guiada, controles, feedback hablado, cancelación, integración y pruebas de práctica.
+- Los tres tramos pertenecen al mismo incremento formal. No se crean commits parciales sin autorización y el incremento no se considera iniciado mediante esta resolución documental.
 
 ## Incremento 7 — Sesión de cinco intentos y adaptación completa
 

@@ -2,9 +2,9 @@
 
 ## 1. Estado y alcance de esta especificación
 
-Esta especificación define la arquitectura objetivo del MVP. Los incrementos 1, 2, 3 y 4 están completados; el último commit confirmado es `b8a78fb feat: add deterministic coaching and adaptation rules`. El incremento 5 — Recorrido vertical de un intento es el siguiente incremento planificado y todavía no se ha iniciado.
+Esta especificación define la arquitectura objetivo del MVP. Los incrementos 1, 2, 3, 4 y 5 están completados; el último commit confirmado es `7f373d3 feat: add single-attempt practice flow`. El incremento 6 — Tres ejercicios y voz accesible es el siguiente incremento planificado y todavía no se ha iniciado.
 
-La revisión actual es exclusivamente documental y resuelve los contratos de integración previos al incremento 5. No autoriza código, dependencias, servicios, commit ni el inicio del incremento 5; su implementación requiere una autorización explícita posterior.
+La revisión actual es exclusivamente documental y resuelve los contratos de integración previos al incremento 6. No autoriza código, dependencias, servicios, commit ni el inicio del incremento 6; su implementación requiere una autorización explícita posterior.
 
 Palabras normativas:
 
@@ -161,7 +161,7 @@ interface RecordingMetadata {
 }
 ```
 
-`pauseCues` contiene posiciones de `targetText` para representar lectura guiada; no es una expectativa clínica sobre pausas reales. `instruction` y `targetText` contienen texto ficticio visible en español neutro.
+`pauseCues` contiene offsets UTF-16 de frontera, base cero, medidos sobre el `targetText` exacto en NFC y compatibles con `String.prototype.slice`. Cada offset representa la frontera inmediatamente posterior a la puntuación que introduce la pausa. Los offsets deben ser únicos, estrictamente crecientes, mayores que cero, menores que `targetText.length` y no pueden dividir un par sustituto. `word_repetition` y `phrase_repetition` usan una lista vacía; `guided_reading` usa al menos una marca. La presentación puede insertar un indicador visible y accesible “Pausa” sin modificar el `targetText` contractual. Estas marcas no asignan una duración clínica o terapéutica ni expresan una expectativa clínica sobre pausas reales. `instruction` y `targetText` contienen texto ficticio visible en español neutro.
 
 ### 6.1 Texto reconocido o declarado
 
@@ -575,6 +575,8 @@ interface SpeechOutput {
 }
 ```
 
+La selección de idioma y voz pertenece al adaptador y no forma parte de los argumentos de `speak`. `speak(text, language)` e `isSupported()` no son contratos canónicos paralelos de salida. `SpeechOutput` tampoco expone `SpeechSynthesis`, `SpeechSynthesisVoice`, `SpeechSynthesisUtterance` u otros objetos crudos del navegador.
+
 `ManualSpeechTextInput` no implementa `SpeechRecognizer`, porque no reconoce voz. Produce un `SpeechTextResult` con `source: 'manual'` tras una acción explícita.
 
 ### 7.1 `BrowserSpeechRecognizer`
@@ -893,6 +895,118 @@ La UI no presenta similitud como precisión clínica, texto manual como transcri
 #### 10.7.7 Límite de 10 MB
 
 El incremento 5 no cambia la implementación vigente del límite de 10 MB. Una captura que lo supere puede descartarse y debe ofrecer una ruta clara y respetuosa para comenzar nuevamente. Revisar la conservación de reproducción o cambiar la política del límite queda registrado para el incremento 10.
+
+### 10.8 Contratos canónicos del incremento 6
+
+El incremento 6 — Tres ejercicios y voz accesible sustituye el catálogo temporal del incremento 5 por el catálogo local final del MVP inicial e integra salida hablada accesible para instrucciones y feedback. Continúa siendo un solo recorrido: no inicia una segunda captura después de `selection_preview`, no crea una sesión de cinco intentos y no implementa historial, adaptación completa, persistencia, selector visible de voces, pausa o reanudación, vista profesional, backend, Supabase u OpenAI.
+
+#### 10.8.1 Catálogo exacto y secuencia inicial
+
+El catálogo contiene exactamente estas tres entradas, en este orden:
+
+| ID | Tipo | Dificultad | Instrucción | `targetText` | `pauseCues` | `expectedMaxDurationMs` |
+| --- | --- | ---: | --- | --- | --- | ---: |
+| `practice-word-casa` | `word_repetition` | 1 | “Pronuncia la palabra visible cuando estés listo.” | `casa` | `[]` | `3_000` |
+| `practice-phrase-calm` | `phrase_repetition` | 2 | “Pronuncia la frase visible cuando estés listo.” | `Camino con calma.` | `[]` | `6_000` |
+| `practice-guided-calm` | `guided_reading` | 3 | “Lee el texto visible y haz una pausa donde aparece la indicación.” | `La mañana está tranquila, camino con calma.` | `[25]` | `12_000` |
+
+El texto de lectura guiada está en NFC, tiene longitud UTF-16 `43`, contiene la coma en el índice `24` y usa el offset de frontera `25`, inmediatamente posterior a esa puntuación. La instrucción, el objetivo y la marca de pausa permanecen visibles, autosuficientes, ficticios y no clínicos.
+
+La secuencia inicial readonly declara exactamente:
+
+```text
+practice-word-casa
+→ practice-phrase-calm
+→ practice-guided-calm
+```
+
+Su orden de tipos es `word_repetition` → `phrase_repetition` → `guided_reading`. La distribución de dificultades 1–2–3 es una decisión de este catálogo ficticio de tres entradas, no una obligación de matriz completa para bibliotecas futuras.
+
+#### 10.8.2 Validación estructural, editorial y orden
+
+La validación del catálogo es pura y recibe `unknown`. Devuelve una unión tipada de éxito o una lista estructurada y no vacía de hallazgos; los datos inválidos previsibles no se expresan mediante excepciones sin contrato:
+
+```ts
+type ExerciseCatalogValidationResult =
+  | { ok: true; catalog: readonly Exercise[]; initialSequence: readonly string[] }
+  | { ok: false; issues: readonly ExerciseCatalogIssue[] }
+```
+
+Cada hallazgo contiene un código estable, un mensaje seguro y, cuando corresponda, `exerciseId` y campo. La validación comprueba:
+
+- array no vacío y exactamente tres entradas;
+- contrato `Exercise` completo;
+- un ejercicio de cada tipo obligatorio;
+- IDs no vacíos y únicos;
+- dificultades `1 | 2 | 3` y la asignación exacta 1–2–3 del catálogo;
+- instrucciones y objetivos no vacíos, visibles y en NFC;
+- duraciones enteras, finitas, positivas y menores o iguales a `60_000`;
+- `pauseCues` UTF-16 dentro de rango, únicos, estrictamente crecientes, posteriores a puntuación y sin dividir pares sustitutos;
+- marcas vacías para palabra y frase, y al menos una para lectura guiada;
+- secuencia inicial de tres IDs existentes, únicos y en el orden canónico;
+- orden del catálogo por tipo, dificultad e ID;
+- ausencia de lenguaje diagnóstico, de severidad, pronóstico, tratamiento, prescripción o clasificación clínica;
+- catálogo, ejercicios, `pauseCues` y secuencia readonly e inmutables.
+
+El orden total es: `word_repetition`, `phrase_repetition`, `guided_reading`, dificultad e ID. Los IDs se comparan ordinalmente mediante `<` y `>`; no se usan `localeCompare`, fecha, UUID o aleatoriedad.
+
+#### 10.8.3 Integración con el recorrido y coaching
+
+- El primer ID de la secuencia sustituye `PRACTICE_WORD_EXERCISE` como ejercicio actual.
+- El catálogo completo sustituye `TEMPORARY_PRACTICE_CATALOG` y se pasa como `allowedExercises`.
+- Los fixtures acústicos y textuales demo se separan del catálogo, conservan su rotulado y no se convierten en ejercicios ni mediciones reales.
+- `validAttemptCountBeforeCurrent` permanece `0` y `coveredExerciseTypesBeforeCurrent` permanece `[]` en el recorrido único.
+- Un intento de palabra válido debe seleccionar `practice-phrase-calm`.
+- Una prueba de dominio construye una frase válida con palabra cubierta y demuestra que puede seleccionar `practice-guided-calm`.
+- `coach-rules-v1`, sus umbrales, prioridades, plantillas, evidencia y versión no cambian.
+- La ausencia del siguiente tipo conserva `missing_required_exercise_type`; no existe fallback.
+- Un ID seleccionado fuera del catálogo conserva el error de aplicación `selected_exercise_not_found` y nunca se aplica silenciosamente.
+- El `CoachInput` y la `CoachDecision` permanecen como snapshot; cargar o cambiar voces no vuelve a evaluar coaching.
+- `selection_preview` continúa terminal y no inicia grabación, reconocimiento, contador, sesión o evaluación.
+
+La UI puede mostrar “Ejercicio 1 de 3” para la palabra, “Ejercicio 2 de 3” en la preview de frase y una representación equivalente para la lectura guiada en catálogo o pruebas. Este progreso describe la secuencia presentacional inicial; no es un contador de intentos válidos, una sesión persistida o un historial adaptativo.
+
+#### 10.8.4 Contenido hablado, parámetros y controles
+
+La síntesis puede hablar únicamente:
+
+- instrucción: el valor visible exacto de `Exercise.instruction`;
+- feedback: la concatenación visible `shortFeedback + " " + explanation`.
+
+No sintetiza texto reconocido, manual o simulado, `targetText` por separado, métricas, evidencia, IDs, versiones o avisos completos. Todo texto hablado tiene equivalente visible.
+
+Cada bloque hablable ofrece “Escuchar instrucción” o “Escuchar devolución”, “Detener voz” mientras exista una locución activa y “Repetir instrucción” o “Repetir devolución”. Los nombres distinguen repetir voz de “Repetir este intento”. No hay autoplay, pausa, reanudación, selector visible de voces o parámetros configurables.
+
+Los parámetros fijos son `rate = 1`, `pitch = 1` y `volume = 1`. El idioma preferido es `es-EC`; cuando se elige otra variante española válida, la locución puede usar el tag de esa voz.
+
+#### 10.8.5 Selección determinista y ciclo de vida de voz
+
+El adaptador obtiene la lista vigente mediante `getVoices()` y selecciona en este orden:
+
+1. voz local `es-EC`;
+2. cualquier voz `es-EC`;
+3. voz local `es-*`;
+4. cualquier voz `es-*`.
+
+Dentro de cada grupo se prioriza `default` y después `voiceURI`, `lang` y `name` mediante comparación ordinal. La identidad estable combina `voiceURI`, `lang` y `name`; no se usa sólo el nombre, no se usa `localeCompare` y no se persiste la selección. Si no existe voz española, el adaptador no usa silenciosamente otro idioma: conserva el texto, muestra que la voz no está disponible y permite completar el recorrido.
+
+`getVoices()` puede comenzar vacío. El adaptador escucha `voiceschanged`, vuelve a obtener la lista completa y selecciona siempre un objeto de voz vigente; no conserva objetos obsoletos. Mantiene una sola locución activa, cancela la anterior antes de hablar y usa una generación monotónica para ignorar eventos tardíos. Una repetición rápida conserva sólo la última solicitud. Las cancelaciones esperadas no se muestran como error; los errores reales son no bloqueantes y dejan disponible el texto.
+
+La voz se cancela antes de iniciar micrófono o reconocimiento, repetir el intento, descartar, continuar, cambiar de ejercicio, entrar en error o desmontar. Al desmontar también se retiran listeners y callbacks. Los eventos de síntesis y `voiceschanged` no mueven el foco ni recalculan decisiones.
+
+#### 10.8.6 Privacidad, demo y accesibilidad
+
+- Sólo se entregan al agente de síntesis instrucciones y feedback ficticio ya visibles.
+- No se sintetizan textos del usuario, métricas, evidencia o identificadores; no existe `fetch`, telemetría o almacenamiento de voz.
+- Se prefiere `localService`, pero Rimay no promete que toda voz sea local u offline; algunas voces pueden ser gestionadas remotamente por el navegador.
+- Un fallo de voz no bloquea las rutas browser, manual o demo.
+- Demo continúa sin micrófono, grabación, reconocimiento o audio del usuario. Su síntesis opcional no convierte fixtures en mediciones reales.
+- Todo audio tiene texto visible equivalente, controles nativos por teclado, foco visible y objetivos adecuados.
+- Una región de estado breve anuncia disponibilidad, reproducción, detención o error sin narrar cada evento interno.
+- “Detener voz” permanece disponible mientras se habla; no hay reproducción o avance automáticos.
+- Las pausas se muestran con texto y no sólo color; el flujo conserva zoom 200 %, reflow, `prefers-reduced-motion`, errores recuperables y compatibilidad con lector de pantalla.
+
+La revisión del catálogo en este incremento es técnica y editorial y puede realizarla el desarrollador. No se afirma revisión clínica o profesional externa. El filtro automatizado no sustituye una revisión profesional y las duraciones y pausas son reglas de interacción no clínicamente validadas.
 
 ## 11. Persistencia local y eliminación
 

@@ -488,6 +488,32 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 
 **Cierre:** el incremento 5 queda completado con dictamen `APTO PARA CERRAR`. No se inició el incremento 6.
 
+## Resolución documental previa al incremento 6
+
+- Fecha: 2026-07-19.
+- Estado: bloqueos documentales previos al incremento 6 resueltos exclusivamente en documentación. Los incrementos 1–5 están completados; la rama confirmada es `main`, el último commit es `7f373d3 feat: add single-attempt practice flow` y el incremento 6 no se inició.
+- Archivos autorizados: `AGENTS.md`, `spec.md`, `checklist.md` y `build-notes.md`. No se modificaron `scope.md`, `prd.md`, código, pruebas, configuración, dependencias o servicios; no se creó commit.
+- Alcance formal: Incremento 6 — Tres ejercicios y voz accesible. Sustituye el fixture temporal de ejercicios, incorpora progreso presentacional y salida hablada de instrucciones y feedback. Conserva `selection_preview` como terminal y no implementa una segunda captura, sesión de cinco intentos, historial, adaptación completa, persistencia, selector visible de voces, pausa/reanudación, vista profesional, backend, Supabase u OpenAI.
+- Catálogo exacto: `practice-word-casa`, palabra de dificultad 1 con “casa”, sin pausas y `3_000 ms`; `practice-phrase-calm`, frase de dificultad 2 con “Camino con calma.”, sin pausas y `6_000 ms`; `practice-guided-calm`, lectura de dificultad 3 con “La mañana está tranquila, camino con calma.”, `pauseCues: [25]` y `12_000 ms`. Las instrucciones canónicas son respectivamente “Pronuncia la palabra visible cuando estés listo.”, “Pronuncia la frase visible cuando estés listo.” y “Lee el texto visible y haz una pausa donde aparece la indicación.”
+- Matriz: el catálogo final del MVP inicial tiene exactamente tres entradas y una por tipo. La distribución 1–2–3 pertenece a estas entradas y no exige una matriz tipo × dificultad de nueve ejercicios para bibliotecas futuras.
+- Secuencia: los IDs readonly siguen palabra → frase → lectura guiada. Puede mostrarse “Ejercicio 1 de 3”, “Ejercicio 2 de 3” y su equivalente para lectura; ese progreso no es un contador de intentos válidos ni una sesión.
+- `pauseCues`: offsets UTF-16 de frontera, base cero, sobre el `targetText` exacto en NFC y compatibles con `String.prototype.slice`. Cada offset es posterior a la puntuación, único, estrictamente creciente, mayor que cero, menor que la longitud y no divide un par sustituto. Palabra/frase usan lista vacía y lectura al menos una marca. “Pausa” puede insertarse sólo en presentación, sin alterar el objetivo ni asignar duración clínica.
+- Validación del catálogo: función pura sobre `unknown` que devuelve éxito tipado o lista estructurada de hallazgos. Comprueba tamaño exacto, contrato `Exercise`, tipos, IDs, dificultades, texto NFC, duraciones enteras/finitas/positivas/`<= 60_000`, pausas, secuencia, orden, seguridad editorial e inmutabilidad. No usa excepciones sin contrato como flujo normal.
+- Orden: palabra, frase, lectura guiada, dificultad e ID ordinal mediante `<` y `>`; sin `localeCompare`, fecha, UUID o aleatoriedad. Catálogo, ejercicios, marcas y secuencia permanecen readonly.
+- Coaching: el primer ID sustituye el ejercicio temporal y el catálogo completo se entrega como `allowedExercises`. `validAttemptCountBeforeCurrent` continúa `0` y la cobertura anterior `[]`. Palabra válida selecciona frase; una prueba de dominio con frase válida y palabra cubierta debe seleccionar lectura. `coach-rules-v1` no cambia; se conservan `missing_required_exercise_type` y `selected_exercise_not_found`.
+- Demo: los fixtures acústicos y textuales se separan del catálogo de ejercicios y conservan su rotulado. Demo permanece sin micrófono, grabación, reconocimiento o audio del usuario; una voz sintetizada opcional no convierte el fixture en una medición.
+- `SpeechOutput`: contrato canónico `speak(text: string): Promise<void>`, `stop(): void`, `isAvailable(): boolean`. Idioma y voz pertenecen al adaptador. No existe contrato paralelo `speak(text, language)` o `isSupported()` para salida y no se exponen objetos Web Speech al dominio.
+- Contenido hablado: sólo el valor visible exacto de `Exercise.instruction` y la concatenación visible `shortFeedback + " " + explanation`. No se habla texto reconocido, manual o simulado, `targetText` por separado, métricas, evidencia, IDs, versiones o avisos completos.
+- Controles y parámetros: escuchar, detener mientras habla y repetir instrucción/devolución; repetir voz se distingue de repetir intento. Sin autoplay, pausa/reanudación, selector visible o configuración. `rate = 1`, `pitch = 1`, `volume = 1`; idioma preferido `es-EC`.
+- Selección de voz: voz local `es-EC`, cualquier `es-EC`, voz local `es-*`, cualquier `es-*`; dentro de grupo, `default`, `voiceURI`, `lang` y `name` ordinales. La identidad combina `voiceURI`, `lang` y `name`; no se persiste. Sin voz española, no se usa otro idioma silenciosamente y el recorrido textual continúa.
+- Ciclo de vida: `getVoices()` puede iniciar vacío; se escucha `voiceschanged`, se recarga la lista y no se retienen objetos obsoletos. Una sola locución activa, cancelación antes de hablar, generación contra eventos tardíos, última solicitud ante repetición rápida, cancelaciones esperadas no visibles y errores reales no bloqueantes. Listeners y voz se limpian al desmontar.
+- Integración de recursos: cancelar voz antes de micrófono, reconocimiento, repetir intento, descartar, continuar, cambiar ejercicio, entrar en error o desmontar. Repetir voz no cambia el estado; continuar cancela voz y termina en preview; cambiar voces no recalcula snapshots.
+- Privacidad: sólo llegan al agente de síntesis instrucciones y feedback ficticio ya visibles; no se sintetizan textos del usuario, métricas o IDs y no existe `fetch`, telemetría o almacenamiento. Se prefiere `localService`, sin prometer que toda voz sea local u offline; algunas voces pueden ser gestionadas remotamente por el navegador.
+- Accesibilidad: texto equivalente, botones nativos por teclado, foco visible, controles adecuados, región de estado breve, detener mientras habla, pausas textuales, sin autoplay o autoavance, zoom 200 %, reflow, reduced motion, errores recuperables y lector de pantalla. Los eventos internos de síntesis no se anuncian individualmente ni mueven foco.
+- División interna futura: tramo A de catálogo y contratos; tramo B de núcleo de voz; tramo C de integración accesible. Los tres forman un único incremento y no autorizan commits parciales.
+- Revisión: el catálogo sólo puede declararse revisado técnica/editorialmente por el desarrollador durante el incremento. No se afirma revisión clínica externa; el filtro automático no sustituye revisión profesional y pausas/duraciones son reglas de interacción no clínicamente validadas.
+- Autorización: esta resolución no autoriza implementación. El código del incremento 6 requiere una solicitud expresa posterior.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |
@@ -521,6 +547,11 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 | D-027 | La aplicación falla de forma segura ante acciones inesperadas. | `complete_session` con contador anterior cero produce `unexpected_coach_action`; una selección ajena al catálogo también es un error tipado. |
 | D-028 | Un intento tiene identidad monotónica y evaluación única. | El ID no usa reloj ni aleatoriedad; la generación invalida resultados tardíos y el motor se llama una sola vez desde la acción explícita. |
 | D-029 | El límite de 10 MB no cambia en el incremento 5. | La recuperación debe ser clara; revisar la conservación de reproducción o la política queda para el incremento 10. |
+| D-030 | El catálogo final inicial contiene exactamente tres ejercicios. | Conserva una palabra de dificultad 1, una frase de dificultad 2 y una lectura guiada de dificultad 3, sin convertir la distribución en matriz obligatoria. |
+| D-031 | `pauseCues` usa offsets UTF-16 de frontera. | Las marcas son posteriores a puntuación, validables con el texto NFC exacto y visibles sin modificar el objetivo ni asignar duración clínica. |
+| D-032 | `SpeechOutput` resuelve idioma y voz dentro del adaptador. | El dominio sólo habla texto, detiene y consulta disponibilidad; la selección española es determinista y no persiste objetos del navegador. |
+| D-033 | La voz del incremento 6 habla sólo instrucción y feedback curados. | No sintetiza contenido del usuario, objetivos por separado, métricas o IDs; toda voz tiene texto visible, control explícito y fallback no bloqueante. |
+| D-034 | El incremento 6 conserva un solo recorrido. | El catálogo y la voz preparan el incremento 7, pero `selection_preview` no inicia una segunda captura, sesión o historial. |
 
 Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan sustituidas por D-004 a D-018 desde esta pausa documental.
 
@@ -533,6 +564,9 @@ Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan s
 - Reconocimiento browser: tag inicial `es-EC`, resultados provisionales y finales, error mapping y alternativa manual.
 - Reconocimiento demo: fixtures por IDs conocidos, sin `fetch` y sin acceso al audio.
 - Coaching: `coach-rules-v1` devuelve `CoachResult`, usa contador y cobertura anteriores al intento actual y selecciona desde `allowedExercises` con orden total; resumen: `summary-rules-v1`.
+- Catálogo: tres ejercicios readonly en orden palabra/frase/lectura, con dificultades 1–2–3 y secuencia explícita; no existe matriz obligatoria de nueve entradas.
+- Pausas editoriales: offsets UTF-16 posteriores a puntuación sobre `targetText` NFC; no representan duración clínica.
+- Voz: `SpeechOutput` mínimo, `es-EC` preferido, selección `es-*` determinista, parámetros `1/1/1`, una locución activa, `voiceschanged`, cancelación y fallback textual.
 - Persistencia: clave `rimay.demo.v1`, máximo 20 sesiones ficticias y lista explícita de claves para eliminación total.
 - Despliegue: build estático Vite en Vercel Hobby; no se prevén variables de entorno runtime.
 
@@ -565,6 +599,9 @@ Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan s
 | Borrado local incompleto | Registro de claves propias, verificación posterior y mensaje de error si queda alguna; no usar `clear()`. |
 | Vercel Hobby cambia límites o condiciones | Revisar documentación antes del despliegue; no activar pago y aceptar pausa al agotar cupo. |
 | Voz española no disponible | Buscar voz `es-*`; conservar texto y mostrar aviso no bloqueante. |
+| La lista de voces inicia vacía, cambia o invalida la selección | Escuchar `voiceschanged`, volver a seleccionar desde la lista vigente, usar generación y no persistir objetos `SpeechSynthesisVoice`. |
+| La síntesis se mezcla con captura o reconocimiento | Cancelar toda locución antes de solicitar micrófono o iniciar reconocimiento. |
+| Una voz del navegador se gestiona remotamente | Preferir `localService`, hablar sólo contenido ficticio visible y no prometer funcionamiento local u offline. |
 | Accesibilidad motora o cognitiva insuficiente | Controles grandes, teclado, foco visible, sin tiempo forzado ni avance automático, mensajes breves. |
 
 ## Dudas pendientes no bloqueantes
