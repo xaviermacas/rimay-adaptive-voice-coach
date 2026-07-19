@@ -308,6 +308,25 @@ La diferencia pequeña entre duración capturada y duración decodificada se con
 
 **Cierre:** el incremento 3 queda completado. Este cierre no inicia ni autoriza coaching, adaptación, persistencia o el incremento 4.
 
+## Resolución contractual previa al incremento 4
+
+- Fecha: 2026-07-18.
+- Estado: ambigüedades contractuales del incremento 4 resueltas exclusivamente en documentación; no se escribió código, no se añadieron dependencias y no se inició el incremento 4.
+- Archivos autorizados y actualizados: `prd.md`, `spec.md`, `checklist.md` y `build-notes.md`.
+- Contador: `CoachInput` usa `validAttemptCountBeforeCurrent`, entero entre `0` y `4`, para contar sólo intentos válidos terminados antes del actual. Calidad bloqueante no lo incrementa; un intento actual válido completa el quinto cuando el contador anterior más uno es `5`.
+- Cobertura: `coveredExerciseTypesBeforeCurrent` conserva tipos únicos de intentos válidos previos en orden canónico. Con contadores `0`, `1` y `2` corresponde al prefijo vacío, palabra, y palabra más frase; con `3` o `4` contiene los tres tipos. Mientras el contador sea menor que `3`, `currentExercise.type` es el siguiente tipo obligatorio. El motor lo añade sólo cuando el intento actual es válido.
+- Tipo obligatorio ausente: si falta cobertura y `allowedExercises` no ofrece un ejercicio del tipo requerido, se devuelve `missing_required_exercise_type` sin fallback.
+- Resultado: `coach-rules-v1` devuelve `CoachResult`, una unión tipada de decisión o `CoachError`. Los códigos mínimos son `invalid_input`, `invalid_attempt_state`, `incompatible_algorithm_version`, `empty_allowed_exercises`, `duplicate_exercise_id`, `invalid_exercise`, `missing_required_exercise_type` e `inconsistent_audio_metrics`.
+- Ejercicio: los contratos canónicos usan `ExerciseType` con `word_repetition`, `phrase_repetition`, `guided_reading`; dificultad `1 | 2 | 3`; y `Exercise` con `id`, `type`, `difficulty`, `instruction`, `targetText`, `pauseCues` y `expectedMaxDurationMs`.
+- Catálogo permitido: el contrato principal es `allowedExercises: readonly Exercise[]`. IDs duplicados son error; la selección ordena copias y nunca muta la entrada.
+- Calidad: `qualityFlags` conserva los IDs exactos de `AudioQualityFlag`. Son bloqueantes ausencia de voz, nivel demasiado bajo, posible clipping, captura demasiado corta y `silenceRatio >= 0.85`. `transcription_missing` y similitud `null` no son fallos de captura.
+- Consistencia acústica: un booleano derivado que contradice su flag correspondiente devuelve `inconsistent_audio_metrics`.
+- Orden de reglas: validación, calidad acústica, contabilización conceptual del intento válido, finalización, cobertura, dificultad, foco, ordenamiento de candidatos, selección y plantilla.
+- Orden de candidatos: tipo obligatorio pendiente, distancia a dificultad objetivo, evitar el ID actual, tipo en orden canónico, dificultad e ID ordinal mediante `<` y `>`; no se usa `localeCompare`.
+- Repetición: `repeat_current` mantiene `selectedExerciseId: null` y no inicia acciones. Si en el incremento 7 el usuario decide continuar, se usa la función pura de candidatos del incremento 4; el intento defectuoso no cuenta ni aporta cobertura.
+- Procedencia: las plantillas distinguen “texto reconocido”, “texto introducido” y “texto simulado”; nunca atribuyen texto manual o demo al análisis de pronunciación y mantienen separadas la evidencia acústica y textual.
+- División: el incremento 4 permanece como un único incremento formal, con tramo A de contratos, validación, configuración y plantillas, y tramo B de reglas, adaptación, selección y matriz adversarial. No se autorizan commits parciales mediante esta resolución.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |
@@ -330,6 +349,11 @@ La diferencia pequeña entre duración capturada y duración decodificada se con
 | D-016 | Compatibilidad primaria: Chrome y Edge de escritorio actuales. | Otros navegadores reciben detección de soporte y ruta manual; no se finge compatibilidad. |
 | D-017 | Todo el contenido de la demostración es ficticio. | No se aceptan pacientes, audio o historias clínicas reales. |
 | D-018 | Codex y GPT-5.6 son herramientas de construcción. | Pueden asistir al equipo, pero no son servicios runtime ni requisitos para ejecutar Rimay. |
+| D-019 | El contador de coaching describe el estado anterior al intento actual. | `validAttemptCountBeforeCurrent` vale de 0 a 4; sólo un intento sin calidad bloqueante puede sumar uno y completar el quinto. |
+| D-020 | La cobertura anterior es una entrada explícita. | `coveredExerciseTypesBeforeCurrent` permite calcular la cobertura posterior con el tipo actual válido y rechazar la ausencia del tipo requerido sin fallback. |
+| D-021 | El motor devuelve una unión tipada. | `CoachResult` separa decisiones completas de errores esperables y evita fallbacks o IDs inventados. |
+| D-022 | `repeat_current` es sólo una recomendación. | No contiene ejercicio alternativo ni inicia acciones; continuar pese a ella se integra en el incremento 7 sin contar el intento defectuoso. |
+| D-023 | La selección de candidatos tiene orden total versionado. | Ordena copias por cobertura, distancia, ID actual, tipo, dificultad e ID ordinal, sin mutar `allowedExercises` ni usar `localeCompare`. |
 
 Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan sustituidas por D-004 a D-018 desde esta pausa documental.
 
@@ -341,7 +365,7 @@ Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan s
 - Texto: `text-metrics-v1` conserva original, normalizado NFC y comparación sin tildes ni diéresis pero con `ñ` distinta de `n`; usa alineamiento dinámico por palabras con operaciones y desempate estables.
 - Reconocimiento browser: tag inicial `es-EC`, resultados provisionales y finales, error mapping y alternativa manual.
 - Reconocimiento demo: fixtures por IDs conocidos, sin `fetch` y sin acceso al audio.
-- Coaching: `coach-rules-v1`; resumen: `summary-rules-v1`.
+- Coaching: `coach-rules-v1` devuelve `CoachResult`, usa contador y cobertura anteriores al intento actual y selecciona desde `allowedExercises` con orden total; resumen: `summary-rules-v1`.
 - Persistencia: clave `rimay.demo.v1`, máximo 20 sesiones ficticias y lista explícita de claves para eliminación total.
 - Despliegue: build estático Vite en Vercel Hobby; no se prevén variables de entorno runtime.
 

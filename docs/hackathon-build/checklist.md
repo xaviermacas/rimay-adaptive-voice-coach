@@ -211,17 +211,28 @@ Implementar `coach-rules-v1` como función pura con plantillas curadas, razones 
 
 - Contratos y configuración de versión en `src/domain/coaching/`.
 - Catálogo versionado de plantillas no clínicas.
-- Política de candidatos en `src/domain/exercises/`.
+- Función pura y exportada de selección de candidatos en `src/domain/exercises/`.
 - Pruebas de reglas, umbrales, órdenes y contenido editorial.
 
 **Aceptación**
 
-- Entradas: calidad de audio, similitud, pausas, duración, proporción de silencio, dificultad e intentos.
-- La misma entrada produce el mismo `CoachDecision` completo.
+- `CoachInput` contiene `currentExercise`, métricas de audio y texto, procedencia, dificultad actual, `validAttemptCountBeforeCurrent`, `coveredExerciseTypesBeforeCurrent` y `allowedExercises: readonly Exercise[]`.
+- `validAttemptCountBeforeCurrent` es un entero entre `0` y `4` que cuenta sólo intentos válidos terminados antes del actual. Calidad bloqueante no lo incrementa; el intento actual válido completa la sesión cuando el contador anterior más uno es `5`.
+- La cobertura anterior contiene tipos únicos de intentos válidos previos en orden canónico. Para contadores `0`, `1` y `2` es respectivamente `[]`, `['word_repetition']` y `['word_repetition', 'phrase_repetition']`; con contador `3` o `4` contiene los tres tipos. Mientras el contador sea menor que `3`, `currentExercise.type` es el siguiente tipo obligatorio; una incoherencia produce `invalid_attempt_state`.
+- El motor añade conceptualmente `currentExercise.type` sólo para un intento válido y garantiza `word_repetition`, `phrase_repetition`, `guided_reading` en ese orden.
+- Si falta un tipo obligatorio y `allowedExercises` no contiene uno de ese tipo, `CoachResult` devuelve `missing_required_exercise_type`; no existe fallback.
+- La misma entrada produce el mismo `CoachResult` completo.
 - Cada salida declara `rulesVersion`, `ruleId`, `templateId`, acción, explicación y evidencia.
+- Los errores esperables usan la rama tipada `ok: false` con, como mínimo, `invalid_input`, `invalid_attempt_state`, `incompatible_algorithm_version`, `empty_allowed_exercises`, `duplicate_exercise_id`, `invalid_exercise`, `missing_required_exercise_type` e `inconsistent_audio_metrics`.
+- `qualityFlags` es la fuente canónica y usa exactamente `no_speech_detected`, `too_quiet`, `possible_clipping`, `audio_too_short` y `transcription_missing`. Los cuatro primeros o `silenceRatio >= 0.85` producen `repeat_current`; `transcription_missing`, ausencia de texto o similitud `null` no son mala captura.
+- Una contradicción entre un booleano acústico derivado y su flag produce `inconsistent_audio_metrics`.
 - Mensajes provienen sólo de plantillas curadas y no contienen afirmaciones diagnósticas.
-- Sólo se seleccionan IDs de `allowedExercises`; lista vacía produce error de configuración.
-- Repetición manual y avance requieren acción del usuario.
+- Las plantillas dicen “texto reconocido” para `browser`, “texto introducido” para `manual` y “texto simulado” para `demo`; no atribuyen texto manual o demo al análisis de pronunciación y separan evidencia acústica de evidencia textual.
+- La evaluación sigue este orden: validación, calidad acústica, contabilización conceptual del intento válido, finalización, cobertura, dificultad, foco, ordenamiento, selección y plantilla.
+- Sólo se seleccionan IDs de `allowedExercises`; lista vacía produce `empty_allowed_exercises` e IDs duplicados producen `duplicate_exercise_id`.
+- La política ordena copias sin mutar la entrada: tipo obligatorio pendiente, distancia a dificultad objetivo, evitar el ID actual, tipo en orden canónico, dificultad e ID mediante comparación ordinal con `<` y `>`, nunca `localeCompare`.
+- Si sólo existe el ejercicio actual y no falta un tipo obligatorio, puede seleccionarse nuevamente.
+- `repeat_current` contiene `selectedExerciseId: null`, es sólo una recomendación y nunca inicia repetición. Repetición y avance requieren acción del usuario.
 - No existe GPT, red, aleatoriedad no controlada o fallback remoto.
 
 **Verificación**
@@ -235,7 +246,13 @@ npm test
 npm run build
 ```
 
-Ejecutar fixtures de cada rama, límites exactos y catálogo adversarial; repetir entradas para comparar igualdad profunda.
+Ejecutar fixtures de cada rama, límites exactos, frontera del quinto intento, contador y cobertura, todos los errores tipados y catálogo adversarial; repetir entradas para comparar igualdad profunda y comprobar que `allowedExercises` no se muta.
+
+**División interna del incremento**
+
+- Tramo A: contratos, validación, configuración y plantillas.
+- Tramo B: reglas, adaptación, selección y matriz adversarial.
+- Ambos tramos pertenecen al mismo incremento 4. No se crean commits parciales salvo autorización posterior y el incremento no se considera aceptado hasta completar ambos.
 
 ## Incremento 5 — Recorrido vertical de un intento
 
@@ -314,7 +331,7 @@ Integrar cobertura, dificultad acotada, repetición manual y finalización deter
 **Archivos previstos**
 
 - Máquina de sesión y política de cobertura.
-- Integración de `coach-rules-v1` con el catálogo.
+- Integración de `coach-rules-v1`, su función pura de candidatos y el catálogo.
 - Fixtures de cinco intentos y límites.
 - Pruebas unitarias y de integración.
 
@@ -325,6 +342,8 @@ Integrar cobertura, dificultad acotada, repetición manual y finalización deter
 - La similitud ajusta dificultad sólo dentro de 1–3.
 - Calidad, pausas, duración y silencio seleccionan plantillas según el orden versionado.
 - La acción del usuario controla repetición y avance; no existen bucles automáticos.
+- Si el usuario continúa pese a `repeat_current`, la sesión usa la función pura de candidatos del incremento 4; el intento con calidad bloqueante no cuenta como válido ni aporta cobertura.
+- `repeat_current` no contiene un ejercicio alternativo y nunca inicia por sí mismo una repetición o continuación.
 - Ningún ejercicio fuera de la lista permitida se aplica.
 
 **Verificación**

@@ -112,8 +112,8 @@ El runtime del MVP es local, determinista y gratuito. No usa OpenAI API, Supabas
 1. Web Audio calcula métricas locales con `audio-metrics-v1`.
 2. `text-metrics-v1` normaliza y tokeniza el prompt y el texto utilizable; calcula conteo, palabras por minuto, similitud, coincidencias, omisiones y adiciones.
 3. La UI muestra valores y procedencia con “No disponible” cuando corresponda y un aviso explícito de que no son métricas clínicas.
-4. `coach-rules-v1` recibe sólo datos derivados: calidad de audio, similitud, pausas, duración, proporción de silencio, dificultad actual y cantidad de intentos.
-5. El motor selecciona una plantilla curada, una acción y sólo un ejercicio contenido en `allowedExerciseIds`. La salida incluye versión, ID de regla, evidencia y explicación breve.
+4. `coach-rules-v1` recibe sólo datos derivados y estado explícito: calidad de audio, similitud, pausas, duración, proporción de silencio, dificultad actual, `validAttemptCountBeforeCurrent` y `coveredExerciseTypesBeforeCurrent`.
+5. El motor selecciona una plantilla curada, una acción y sólo un ejercicio contenido en `allowedExercises`. La salida incluye versión, ID de regla, evidencia y explicación breve.
 6. La misma entrada produce siempre la misma salida. No hay llamadas de red, texto generado por IA ni reintentos cobrables.
 7. La devolución se muestra como texto y puede escucharse. El usuario elige “Repetir este intento” o “Continuar”.
 
@@ -217,8 +217,8 @@ No existen reintentos automáticos de red ni rutas a proveedores contratados. To
 - **FR-11:** Toda métrica muestra unidad, versión, procedencia y disponibilidad correcta.
 - **FR-12:** Métricas textuales son `null` si falta texto utilizable.
 - **FR-13:** Coincidencias, omisiones y adiciones conservan un orden determinista.
-- **FR-14:** El motor devuelve la misma decisión para la misma entrada y declara `rulesVersion`, `ruleId`, `templateId`, explicación y evidencia.
-- **FR-15:** El ejercicio aplicado pertenece a `allowedExerciseIds`.
+- **FR-14:** El motor devuelve el mismo `CoachResult` para la misma entrada; una decisión exitosa declara `rulesVersion`, `ruleId`, `templateId`, explicación y evidencia.
+- **FR-15:** El ejercicio aplicado pertenece a `allowedExercises`.
 - **FR-16:** La repetición manual está siempre bajo control del usuario.
 - **FR-17:** Los tres tipos de ejercicio aparecen dentro de los tres primeros intentos válidos.
 - **FR-18:** La sesión finaliza con exactamente cinco intentos válidos aceptados.

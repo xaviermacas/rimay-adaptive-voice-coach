@@ -136,18 +136,20 @@ Los siguientes contratos son la forma canónica prevista. Al implementarse, debe
 
 ```ts
 type UserRole = 'patient' | 'professional'
-type ExerciseType = 'word_repetition' | 'phrase_repetition' | 'guided_reading'
+type ExerciseType =
+  | 'word_repetition'
+  | 'phrase_repetition'
+  | 'guided_reading'
 type Difficulty = 1 | 2 | 3
 
 interface Exercise {
   id: string
   type: ExerciseType
   difficulty: Difficulty
-  promptText: string
-  instructionText: string
+  instruction: string
+  targetText: string
   pauseCues: readonly number[]
   expectedMaxDurationMs: number
-  tags: readonly string[]
 }
 
 interface RecordingMetadata {
@@ -159,7 +161,7 @@ interface RecordingMetadata {
 }
 ```
 
-`pauseCues` contiene posiciones del `promptText` para representar lectura guiada; no es una expectativa clínica sobre pausas reales.
+`pauseCues` contiene posiciones de `targetText` para representar lectura guiada; no es una expectativa clínica sobre pausas reales. `instruction` y `targetText` contienen texto ficticio visible en español neutro.
 
 ### 6.1 Texto reconocido o declarado
 
@@ -242,6 +244,10 @@ Los valores y umbrales de `audio-metrics-v1` permanecen como fueron implementado
 
 El identificador histórico `transcription_missing` se conserva para no cambiar silenciosamente `audio-metrics-v1`; en la nueva UI significa que todavía no existe texto utilizable, ya sea de origen browser, demo o manual. Renombrarlo requeriría una versión nueva.
 
+`qualityFlags` es la fuente canónica para las condiciones acústicas categóricas. Los identificadores exactos permanecen `audio_too_short`, `no_speech_detected`, `too_quiet`, `possible_clipping` y `transcription_missing`; el motor no crea alias. Para `coach-rules-v1` son bloqueantes `audio_too_short`, `no_speech_detected`, `too_quiet`, `possible_clipping` y `silenceRatio >= 0.85`. `transcription_missing`, ausencia de texto utilizable o similitud `null` no son fallos de captura.
+
+Todo booleano derivado que represente la misma condición que una bandera debe coincidir con `qualityFlags`. En `audio-metrics-v1`, `possibleClipping` debe ser igual a `qualityFlags.includes('possible_clipping')`; una contradicción produce `inconsistent_audio_metrics` y no una decisión de coaching.
+
 ### 6.3 Métricas de texto
 
 ```ts
@@ -313,16 +319,17 @@ type MetricEvidenceKey =
   | keyof AudioMetrics
   | keyof TextMetrics
   | 'currentDifficulty'
-  | 'validAttemptCount'
+  | 'validAttemptCountBeforeCurrent'
 
 interface CoachInput {
   attemptId: string
-  exercise: Exercise
+  currentExercise: Exercise
   textSource: SpeechTextSource | null
   audioMetrics: AudioMetrics
   textMetrics: TextMetrics | null
   currentDifficulty: Difficulty
-  validAttemptCount: number
+  validAttemptCountBeforeCurrent: number
+  coveredExerciseTypesBeforeCurrent: readonly ExerciseType[]
   allowedExercises: readonly Exercise[]
 }
 
@@ -337,9 +344,32 @@ interface CoachDecision {
   evidenceKeys: readonly MetricEvidenceKey[]
   selectedExerciseId: string | null
 }
+
+type CoachErrorCode =
+  | 'invalid_input'
+  | 'invalid_attempt_state'
+  | 'incompatible_algorithm_version'
+  | 'empty_allowed_exercises'
+  | 'duplicate_exercise_id'
+  | 'invalid_exercise'
+  | 'missing_required_exercise_type'
+  | 'inconsistent_audio_metrics'
+
+interface CoachError {
+  code: CoachErrorCode
+  message: string
+}
+
+type CoachResult =
+  | { ok: true; decision: CoachDecision }
+  | { ok: false; error: CoachError }
 ```
 
-`shortFeedback` y `explanation` salen exclusivamente de plantillas curadas. `selectedExerciseId` debe ser `null` para `repeat_current` y `complete_session`, o pertenecer a `allowedExercises` para `continue`.
+`validAttemptCountBeforeCurrent` cuenta únicamente intentos válidos terminados antes del actual. Debe ser un entero entre `0` y `4`. Un intento con calidad bloqueante no lo incrementa. Si el intento actual es válido, completa la sesión cuando `validAttemptCountBeforeCurrent + 1 === 5`.
+
+`coveredExerciseTypesBeforeCurrent` contiene únicamente tipos cubiertos por intentos válidos anteriores, sin duplicados y en orden canónico. Para contadores `0`, `1` y `2`, debe ser respectivamente `[]`, `['word_repetition']` y `['word_repetition', 'phrase_repetition']`; con contador `3` o `4` contiene los tres tipos. Mientras el contador sea menor que `3`, `currentExercise.type` debe ser el siguiente tipo del orden. Cualquier incoherencia produce `invalid_attempt_state`. Para un intento actual válido, el motor calcula internamente la cobertura posterior añadiendo `currentExercise.type`.
+
+`shortFeedback` y `explanation` salen exclusivamente de plantillas curadas. `selectedExerciseId` debe ser `null` para `repeat_current` y `complete_session`, o pertenecer a `allowedExercises` para `continue`. Los errores esperables se devuelven como `CoachResult`; no se expresan como decisiones parciales ni mediante un ID inventado.
 
 ### 6.5 Sesiones y resumen
 
@@ -364,7 +394,6 @@ interface Session {
   status: 'in_progress' | 'completed'
   fictionalParticipantId: string
   attemptIds: readonly string[]
-  validAttemptCount: number
   currentExerciseId: string | null
   startedAt: string
   completedAt: string | null
@@ -392,6 +421,8 @@ interface ProfessionalSummary {
 ```
 
 Las recapturas descartadas y los errores técnicos nunca se convierten en `Attempt`. Las referencias sólo pueden apuntar a intentos de la misma sesión y a claves existentes.
+
+En `Session`, la cantidad de intentos válidos terminados se deriva de `attemptIds.length`; no se persiste un segundo contador que pueda divergir. `validAttemptCountBeforeCurrent` pertenece exclusivamente a `CoachInput` y describe el estado anterior al intento que se está evaluando.
 
 ## 7. Contratos de reconocimiento y salida
 
@@ -562,41 +593,53 @@ wordsPerMinute = transcribedWordCount / (totalDurationMs / 60_000)
 
 ### 10.1 Entradas y pureza
 
-`coach-rules-v1` recibe exclusivamente `CoachInput`. No recibe audio, objetos del navegador, hora actual, red ni aleatoriedad. Todos los catálogos, umbrales, plantillas y órdenes pertenecen a la versión.
+`coach-rules-v1` recibe exclusivamente `CoachInput` y devuelve `CoachResult`. No recibe audio, objetos del navegador, hora actual, red ni aleatoriedad. Todos los catálogos, umbrales, plantillas y órdenes pertenecen a la versión.
 
-La misma entrada serializable debe producir exactamente el mismo `CoachDecision`, incluidos texto, IDs, evidencia y ejercicio.
+La misma entrada serializable debe producir exactamente el mismo `CoachResult`, incluidos error o decisión, texto, IDs, evidencia y ejercicio. Los errores esperables permanecen en la rama `ok: false`; no se convierten en fallbacks, decisiones incompletas o excepciones de control de flujo.
 
 ### 10.2 Tabla de señales
 
 | Señal | Uso permitido |
 | --- | --- |
-| Banderas de calidad | Sugerir una captura más clara o mantener dificultad; nunca clasificar a la persona. |
-| Similitud textual | Ajustar dificultad dentro de 1–3 y explicar comparación con el prompt. |
+| Banderas de calidad | Usar los identificadores exactos de `AudioQualityFlag` para sugerir una captura más clara; nunca clasificar a la persona. |
+| Similitud textual | Ajustar dificultad dentro de 1–3 y explicar la comparación con `targetText` según la procedencia. |
 | Pausas | Elegir una plantilla de pausas sólo en lectura guiada. |
 | Duración | Elegir una plantilla de ritmo cuando supera la duración esperada del ejercicio; no imponer diagnóstico ni límite terapéutico. |
 | Proporción de silencio | Sugerir revisar inicio de captura o repetir; no inferir fluidez clínica. |
 | Dificultad actual | Calcular la dificultad objetivo acotada. |
-| Número de intentos | Garantizar cobertura, finalización y evitar un ciclo automático. |
+| Intentos válidos anteriores | Usar `validAttemptCountBeforeCurrent` para finalización sin contar capturas bloqueantes. |
+| Cobertura anterior | Usar `coveredExerciseTypesBeforeCurrent` para garantizar los tres tipos obligatorios en orden. |
 
 ### 10.3 Orden de evaluación
 
-1. Validar entrada, versiones y lista de ejercicios permitidos. Una lista vacía es error de configuración; no se inventa un ID.
-2. Si hay `no_speech_detected`, `too_quiet`, `possible_clipping`, `audio_too_short` o `silenceRatio >= 0.85`, seleccionar `repeat_current`, foco `clear_capture` y una plantilla de captura. La repetición ocurre sólo si el usuario la elige.
-3. Si el intento aceptado completa el quinto intento, seleccionar `complete_session`, sin siguiente ejercicio.
-4. Para intentos que aún deben cubrir palabra, frase o lectura guiada, filtrar primero por el tipo obligatorio pendiente.
-5. Calcular dificultad objetivo:
+1. Validar entrada, estado del intento, versión `audio-metrics-v1`, versión `text-metrics-v1` cuando existan métricas textuales, consistencia acústica y `allowedExercises`:
+   - entrada mal formada: `invalid_input`;
+   - contador fuera de `0`–`4`, cobertura imposible o estado incoherente con intentos válidos anteriores: `invalid_attempt_state`;
+   - versión de algoritmo incompatible: `incompatible_algorithm_version`;
+   - lista permitida vacía: `empty_allowed_exercises`;
+   - IDs repetidos: `duplicate_exercise_id`;
+   - ejercicio actual o permitido inválido: `invalid_exercise`;
+   - contradicción entre un booleano acústico derivado y su flag: `inconsistent_audio_metrics`.
+2. Evaluar calidad acústica desde `qualityFlags`. Si contiene `no_speech_detected`, `too_quiet`, `possible_clipping` o `audio_too_short`, o si `silenceRatio >= 0.85`, devolver `repeat_current`, foco `clear_capture` y una plantilla de captura. El intento no es válido, no incrementa `validAttemptCountBeforeCurrent` y no añade cobertura. La repetición sólo ocurre si el usuario la elige.
+3. Si la calidad no es bloqueante, contabilizar conceptualmente el intento actual como válido: `nextValidAttemptCount = validAttemptCountBeforeCurrent + 1` y cobertura posterior igual a los tipos anteriores más `currentExercise.type`.
+4. Si `nextValidAttemptCount === 5`, devolver `complete_session`, sin siguiente ejercicio. Una captura bloqueante en esta frontera ya terminó en el paso 2 y nunca completa la sesión.
+5. Calcular el primer tipo obligatorio todavía ausente después del intento actual, en este orden: `word_repetition`, `phrase_repetition`, `guided_reading`. Si falta uno, considerar exclusivamente ejercicios permitidos de ese tipo. Si no existe ninguno, devolver `missing_required_exercise_type`; no aplicar fallback.
+6. Calcular dificultad objetivo:
    - similitud `null`: mantener;
    - similitud menor de `0.65`: reducir una, mínimo 1;
    - similitud entre `0.65` y `0.85`, inclusivo: mantener;
    - similitud mayor de `0.85` y sin flags de captura: aumentar una, máximo 3;
    - en otro caso: mantener.
-6. Seleccionar foco de plantilla en este orden:
+7. Seleccionar foco de plantilla en este orden:
    - lectura guiada con `pauseCount === 0`: `follow_pause_cues`;
    - duración mayor a `expectedMaxDurationMs`: `steady_pace`;
    - similitud menor de `0.65`: `repeat_calmly`;
    - resto: `continue`.
-7. Ordenar candidatos por: tipo obligatorio pendiente, distancia a dificultad objetivo, evitar repetir el mismo ID, tipo, dificultad e ID.
-8. Elegir el primer candidato y producir explicación desde una plantilla asociada al `ruleId`, mencionando sólo evidencia real y procedencia correcta.
+8. Ordenar una copia de los candidatos, sin mutar `allowedExercises`, por: tipo obligatorio pendiente, distancia a dificultad objetivo, evitar `currentExercise.id`, orden de tipo, dificultad e ID. El orden de tipo es `word_repetition`, `phrase_repetition`, `guided_reading`. Los IDs usan comparación ordinal con `<` y `>`; no se usa `localeCompare`.
+9. Elegir el primer candidato. Si solamente existe `currentExercise` y no falta un tipo obligatorio, puede seleccionarse de nuevo. El ID elegido siempre pertenece a `allowedExercises`.
+10. Seleccionar la plantilla asociada al `ruleId` y producir `CoachDecision`, mencionando sólo evidencia real y procedencia correcta.
+
+La política de candidatos se exporta como función pura independiente para que el incremento 7 pueda continuar después de una recomendación `repeat_current` sin añadir un ejercicio alternativo a esa decisión. Recibe datos validados, ordena copias y produce el mismo resultado para la misma entrada.
 
 Los umbrales son reglas de interacción del demo y no están clínicamente validados. Cualquier cambio crea `coach-rules-v2`.
 
@@ -606,12 +649,15 @@ Los umbrales son reglas de interacción del demo y no están clínicamente valid
 - El texto visible no contiene diagnóstico, severidad, pronóstico, prescripción, comparación poblacional o promesas.
 - La plantilla no inserta valores que no existan en la evidencia.
 - Los números de métricas se renderizan desde los contratos, no desde texto libre.
+- La procedencia se nombra exactamente como “texto reconocido” para `browser`, “texto introducido” para `manual` y “texto simulado” para `demo`.
+- Una plantilla manual o demo no atribuye el texto al análisis de pronunciación. La evidencia acústica y textual se mantiene separada y ninguna se presenta como validación de la otra.
 - Un filtro editorial unitario revisa todas las plantillas durante pruebas.
 
 ### 10.5 Repetición manual
 
 - Antes de aceptar un intento, el usuario puede descartarlo y grabar de nuevo.
-- Después de ver una decisión `repeat_current`, el usuario elige repetir o aceptar y continuar según las reglas de conteo del flujo.
+- Una decisión `repeat_current` siempre contiene `selectedExerciseId: null`; es una recomendación y nunca inicia una repetición.
+- Si el usuario decide continuar pese a la recomendación, esa interacción pertenece al incremento 7 y usa la función pura de candidatos exportada en el incremento 4. El intento defectuoso no cuenta como válido ni aporta cobertura.
 - El motor no inicia grabación, no avanza automáticamente y no impone una cuenta regresiva.
 - Repetir libera primero el `Blob`, URL, reconocimiento y resultados temporales anteriores.
 
@@ -744,9 +790,12 @@ No se prevén carpetas `supabase/`, `api/`, `functions/` o adaptadores OpenAI en
 - Tokenización, conteos, WER, similitud, objetivo vacío y WPM basado en `totalDurationMs`.
 - Alineamiento por programación dinámica con coincidencias, sustituciones, omisiones, adiciones, repeticiones y el orden de desempate canónico.
 - Procedencia `browser`, `demo` y `manual` y sus invariantes.
-- Reglas de coaching para cada prioridad, umbral exacto y combinación de señales.
-- Orden estable de candidatos y rechazo de IDs no permitidos.
-- Plantillas sin lenguaje clínico y resultados idénticos ante la misma entrada.
+- Reglas de coaching para cada prioridad, umbral exacto, combinación de señales y frontera del quinto intento con calidad válida o bloqueante.
+- Validación de `validAttemptCountBeforeCurrent` entre `0` y `4`, cobertura anterior coherente y cálculo de cobertura posterior sólo para un intento válido.
+- Cada rama tipada de `CoachResult`, incluidas versiones incompatibles, lista vacía, IDs duplicados, ejercicio inválido, tipo obligatorio ausente y métricas acústicas inconsistentes.
+- Orden estable de candidatos sobre copias: cobertura, distancia, ID actual, orden canónico de tipo, dificultad e ID ordinal sin `localeCompare`.
+- Catálogo adversarial, rechazo de IDs no permitidos, ausencia de fallback para tipo obligatorio y repetición del ejercicio actual cuando es el único candidato válido.
+- Plantillas sin lenguaje clínico, procedencia textual correcta, evidencia acústica/textual separada y resultados idénticos ante la misma entrada.
 - Resumen con referencias existentes y orden estable.
 - Serialización que rechaza audio, objetos del navegador y texto provisional.
 - Eliminación completa de claves propias sin usar `clear()`.
