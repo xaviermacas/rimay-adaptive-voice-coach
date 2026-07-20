@@ -684,7 +684,7 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 
 - Fecha: 2026-07-20.
 - Alcance: corrección mínima y autorizada de dos defectos P1 observados en producción. No se iniciaron los incrementos 8–9, no se añadieron características, servicios o dependencias y `package.json`/`package-lock.json` permanecieron intactos.
-- Estado: el audio corregido en `113754e` fue validado funcionalmente, pero la voz volvió a reproducir el fallo inicial en ese deployment. La corrección final de la carrera React está aprobada automáticamente; todavía se debe enviar su nuevo commit, esperar otro deployment y repetir voz en Chrome y Edge.
+- Estado: hotfix cerrado. El commit final `2a7214a5211650a04936b8cf01f776767855bdf8` está enviado a `main` y Vercel confirmó un deployment de producción `READY` asociado exactamente a ese SHA. El responsable confirmó manualmente en la aplicación pública que la voz se habilita en el primer montaje y que el flujo de audio corregido funciona; no queda push o deployment de código pendiente.
 
 ### P1 — voces de SpeechSynthesis en el primer montaje
 
@@ -698,7 +698,7 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 - Evidencia de producción sobre `a64e11a`: el `Blob` tenía 37 315 bytes, MIME `audio/webm`, `readyState === 4`, `mediaError === null` y una pista de audio visible, pero `duration === Infinity`; el reproductor mostraba `0:00` y Web Audio rechazaba `decodeAudioData`. El bundle servido (`index-CjWZIr1i.js`) correspondía al primer hotfix, por lo que no era un deployment obsoleto.
 - Causa raíz confirmada: la carrera de finalización corregida por `a64e11a` era un riesgo real, pero no explicaba esta reproducción. Chromium documenta que su WebM en vivo puede carecer de duración y cues por diseño; ese contenedor puede quedar cargado por el elemento `<audio>` y aun no ser aceptado como archivo completo por `decodeAudioData`. La duración infinita es la señal decisiva. Fuentes: [implementación de MediaRecorder en Chromium](https://chromium.googlesource.com/chromium/src/third_party/+/refs/heads/main/blink/renderer/modules/mediarecorder/README.md) y [contrato de `decodeAudioData`](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/decodeAudioData).
 - Corrección: se conservan las garantías de finalización de `a64e11a` y se cambia sólo la negociación del contenedor. En Chrome/Edge se priorizan `audio/mp4;codecs=mp4a.40.2`, `audio/mp4;codecs=opus` y `audio/mp4`; WebM queda como fallback cuando MP4 no está disponible. El navegador objetivo confirmó `isTypeSupported(...) === true` para los tres candidatos MP4. El MIME final continúa tomando primero `mediaRecorder.mimeType`, sin declarar un formato distinto de los bytes reales.
-- Regresión: las 14 pruebas de ciclo de vida siguen aprobadas; una prueba nueva exige MP4/AAC cuando está disponible y otra recorre todos los candidatos MP4 antes de aceptar WebM. La interfaz comprueba que el MIME negociado llega al constructor y al estado visible. La reproducción, duración finita, análisis y reanálisis reales continúan pendientes de validación en Chrome y Edge tras desplegar esta corrección.
+- Regresión: las 14 pruebas de ciclo de vida siguen aprobadas; una prueba nueva exige MP4/AAC cuando está disponible y otra recorre todos los candidatos MP4 antes de aceptar WebM. La interfaz comprueba que el MIME negociado llega al constructor y al estado visible. La validación manual real en producción confirmó Blob reproducible y decodificable, duración real, análisis acústico correcto, reanálisis y reinicio.
 
 ### Matriz automática del hotfix
 
@@ -713,7 +713,8 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 - `npm.cmd test`: 33 archivos y 361/361 pruebas aprobadas.
 - `npm.cmd run build`: código 0; Vite 8.1.5 transformó 70 módulos y generó `dist/index.html` (0.58 kB), CSS (22.65 kB) y JavaScript (302.48 kB).
 - `git diff --check`: código 0.
-- Validación de producción pendiente: primer montaje de voz, captura reproducible, análisis y reanálisis deben repetirse en Chrome y Edge después del deployment de este commit. Hasta entonces la versión no está apta para grabar el video final.
+- Validación manual real: realizada por el responsable sobre la URL pública de producción, no sobre el servidor local. Confirmó voz española disponible en el primer montaje sin cambiar de estado, captura reproducible con duración real, análisis acústico, reanálisis y reinicio. La procedencia del deployment fue verificada contra `2a7214a5211650a04936b8cf01f776767855bdf8`. Codex no repitió la captura con micrófono ni recibió evidencia separada de una revalidación final en Edge; esas afirmaciones no se inventan.
+- Revisión clínica: no hubo revisión clínica externa. El cierre es exclusivamente técnico y no valida uso clínico, diagnóstico, severidad o tratamiento.
 
 ## Decisiones confirmadas
 

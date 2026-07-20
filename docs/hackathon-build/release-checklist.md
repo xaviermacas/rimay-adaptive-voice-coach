@@ -1,6 +1,6 @@
 # Checklist de versión candidata y entrega
 
-Las casillas marcadas corresponden a evidencia observada en el repositorio o a validación manual histórica. El audio ya fue validado sobre `113754e`, pero la voz conservó una carrera entre snapshot y suscripción; la versión no vuelve a considerarse validada hasta desplegar esta corrección final y repetir Chrome y Edge.
+Las casillas marcadas corresponden a evidencia observada en el repositorio o a validación manual histórica. El hotfix final está desplegado en producción sobre `2a7214a5211650a04936b8cf01f776767855bdf8`; el responsable confirmó manualmente el primer montaje de voz y el flujo de audio corregido en la aplicación pública. No hubo revisión clínica externa.
 
 ## Código congelado
 
@@ -30,7 +30,7 @@ Ejecutar la matriz completa sobre el árbol documental final. Registrar cantidad
 
 ## Validación manual
 
-La validación funcional anterior ocurrió sobre el incremento 7 en Chrome y Edge, pero después se reprodujeron dos P1. Sus resultados no validan el nuevo hotfix; no se deben inventar verificaciones adicionales.
+La validación manual real del hotfix fue reportada por el responsable sobre producción, no sobre el servidor local. Codex confirmó la procedencia y estado `READY` del deployment, pero no operó el micrófono ni recibió un resultado separado de la revalidación final en Edge; las casillas específicas conservan esa distinción.
 
 ### Revalidación obligatoria del hotfix P1
 
@@ -39,10 +39,10 @@ La validación funcional anterior ocurrió sobre el incremento 7 en Chrome y Edg
 - [x] Regresión automática: último chunk incluido y Blob creado sólo tras el evento `stop`.
 - [x] Regresión automática: reanálisis usa el mismo Blob; capturas tardías o nuevas permanecen aisladas.
 - [x] Regresión automática: MP4/AAC se prioriza cuando está disponible y WebM permanece como fallback.
-- [ ] Commit de sincronización React enviado a `main` y deployment de Vercel asociado al nuevo SHA.
-- [ ] Chrome: “Escuchar instrucción” se habilita en el primer recorrido sin remontar la vista.
+- [x] Commit de sincronización React enviado a `main` y deployment de Vercel asociado al nuevo SHA.
+- [x] Chrome: “Escuchar instrucción” se habilita en el primer recorrido sin remontar la vista; confirmación manual del responsable en producción.
 - [ ] Edge: “Escuchar instrucción” se habilita en el primer recorrido sin remontar la vista.
-- [ ] Chrome: grabación de 3–4 s muestra duración reproducible, análisis válido y reanálisis válido.
+- [x] Chrome: grabación muestra duración reproducible, análisis válido, reanálisis y reinicio válidos; confirmación manual del responsable en producción.
 - [ ] Edge: grabación de 3–4 s muestra duración reproducible, análisis válido y reanálisis válido.
 - [ ] Console sin errores y Network/Storage sin audio, texto, métricas o persistencia propia durante ambos recorridos.
 - [ ] Micrófono liberado al finalizar, descartar, reemplazar y salir del intento.
