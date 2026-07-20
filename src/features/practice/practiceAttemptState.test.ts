@@ -27,7 +27,6 @@ describe('maquina de estados de un intento', () => {
     const initial = createInitialPracticeState(
       'practice-attempt-1',
       1,
-      INITIAL_EXERCISE,
     );
     expect(transitionPracticeAttempt(initial, { type: 'analysis_started' })).toBe(
       initial,
@@ -69,7 +68,6 @@ describe('maquina de estados de un intento', () => {
     const initial = createInitialPracticeState(
       'practice-attempt-1',
       1,
-      INITIAL_EXERCISE,
     );
     const privacy = transitionPracticeAttempt(initial, {
       type: 'choose_mode',
@@ -96,6 +94,8 @@ describe('maquina de estados de un intento', () => {
         audioMetrics: DEMO_AUDIO_METRICS_FIXTURE,
         textMetrics: null,
         allowedExercises: EXERCISE_CATALOG,
+        validAttemptCountBeforeCurrent: 0,
+        coveredExerciseTypesBeforeCurrent: [],
       }),
     ).toMatchObject({
       attemptId: 'practice-attempt-7',

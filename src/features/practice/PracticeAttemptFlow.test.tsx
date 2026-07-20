@@ -188,6 +188,131 @@ async function openModeChoice(): Promise<void> {
   await userEvent.click(screen.getByRole('button', { name: 'Preparar intento' }));
 }
 
+async function analyzeCurrentDemoAttempt(): Promise<void> {
+  await openModeChoice();
+  await userEvent.click(screen.getByRole('radio', { name: /demostración/i }));
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Cargar datos simulados' }),
+  );
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Analizar intento' }),
+  );
+  await screen.findByRole('heading', { name: 'Devolución del intento' });
+}
+
+async function acceptDemoAttemptAndActivateNext(): Promise<void> {
+  await analyzeCurrentDemoAttempt();
+  await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+  await userEvent.click(
+    await screen.findByRole('button', {
+      name: 'Comenzar siguiente ejercicio',
+    }),
+  );
+  await screen.findByRole('button', { name: 'Preparar intento' });
+}
+
+async function provideRecordedAudio(
+  recorderCountBeforeCapture: number,
+): Promise<void> {
+  await waitFor(() =>
+    expect(FunctionalMediaRecorder.instances).toHaveLength(
+      recorderCountBeforeCapture + 1,
+    ),
+  );
+  act(() => {
+    FunctionalMediaRecorder.instances.at(-1)?.emitData(
+      new Blob(['audio-ficticio'], { type: 'audio/webm' }),
+    );
+  });
+  currentTimeMs += 1_200;
+}
+
+async function analyzeCurrentManualAttempt(targetText: string): Promise<void> {
+  await openModeChoice();
+  const recorderCountBeforeCapture = FunctionalMediaRecorder.instances.length;
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Iniciar grabación' }),
+  );
+  await provideRecordedAudio(recorderCountBeforeCapture);
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Detener grabación' }),
+  );
+  const textBox = await screen.findByRole('textbox', {
+    name: 'Escribe lo que intentaste pronunciar',
+  });
+  await userEvent.type(textBox, targetText);
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Confirmar texto manual' }),
+  );
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Analizar intento' }),
+  );
+  await screen.findByRole('heading', { name: 'Devolución del intento' });
+}
+
+async function analyzeCurrentBrowserAttempt(
+  recognizer: ControlledBrowserRecognizer,
+  targetText: string,
+): Promise<void> {
+  await openModeChoice();
+  await userEvent.click(
+    screen.getByRole('radio', { name: /reconocimiento del navegador/i }),
+  );
+  await userEvent.click(
+    screen.getByRole('checkbox', { name: /entiendo el aviso/i }),
+  );
+  const recorderCountBeforeCapture = FunctionalMediaRecorder.instances.length;
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Iniciar grabación' }),
+  );
+  await provideRecordedAudio(recorderCountBeforeCapture);
+  act(() => recognizer.final(targetText));
+  await userEvent.click(
+    screen.getByRole('button', {
+      name: 'Detener grabación y reconocimiento',
+    }),
+  );
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Analizar intento' }),
+  );
+  await screen.findByRole('heading', { name: 'Devolución del intento' });
+}
+
+async function activateAfterAcceptedAttempt(): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+  await userEvent.click(
+    await screen.findByRole('button', {
+      name: 'Comenzar siguiente ejercicio',
+    }),
+  );
+  await screen.findByRole('button', { name: 'Preparar intento' });
+}
+
+type FullSessionMode = 'browser' | 'manual' | 'demo';
+
+const FULL_SESSION_TARGETS = [
+  'casa',
+  'Camino con calma.',
+  'La mañana está tranquila, camino con calma.',
+  'La mañana está tranquila, camino con calma.',
+  'La mañana está tranquila, camino con calma.',
+] as const;
+
+const FULL_SESSION_CASES: readonly [
+  string,
+  readonly [
+    FullSessionMode,
+    FullSessionMode,
+    FullSessionMode,
+    FullSessionMode,
+    FullSessionMode,
+  ],
+][] = [
+  ['browser', ['browser', 'browser', 'browser', 'browser', 'browser']],
+  ['manual', ['manual', 'manual', 'manual', 'manual', 'manual']],
+  ['mixta', ['demo', 'manual', 'browser', 'demo', 'manual']],
+];
+
 async function finishRecording(): Promise<void> {
   await waitFor(() => expect(FunctionalMediaRecorder.instances).toHaveLength(1));
   act(() => {
@@ -279,8 +404,177 @@ describe('PracticeAttemptFlow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     const preview = await screen.findByRole('heading', { name: 'Siguiente ejercicio' });
     expect(document.activeElement).toContainElement(preview);
+    expect(screen.getByText(/origen.*intento válido aceptado/i)).toBeInTheDocument();
     expect(screen.getByText('Camino con calma.')).toBeInTheDocument();
     expect(coachEvaluator).toHaveBeenCalledOnce();
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it('completa cinco intentos demo, no crea un sexto y reinicia con estado limpio', async () => {
+    render(<PracticeAttemptFlow evaluateCoach={evaluateCoach} />);
+
+    for (let validAttemptIndex = 0; validAttemptIndex < 4; validAttemptIndex += 1) {
+      await acceptDemoAttemptAndActivateNext();
+    }
+
+    expect(screen.getByText('4 de 5')).toBeInTheDocument();
+    await analyzeCurrentDemoAttempt();
+    expect(
+      screen.getByRole('button', { name: 'Finalizar sesión' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Sesión técnica completada' }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Finalizar sesión' }),
+    );
+    const completedHeading = await screen.findByRole('heading', {
+      name: 'Sesión técnica completada',
+    });
+    await waitFor(() =>
+      expect(document.activeElement).toContainElement(completedHeading),
+    );
+    expect(screen.getByText('5 de 5 intentos válidos')).toBeInTheDocument();
+    expect(
+      screen.getByText('3 tipos de ejercicios practicados'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('El audio no fue conservado')).toBeInTheDocument();
+    expect(screen.queryByText('Recorrido finalizado')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/promedio|tendencia|resumen clínico/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Preparar intento' }),
+    ).not.toBeInTheDocument();
+    expect(getUserMedia).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Iniciar nueva sesión' }),
+    );
+    expect(screen.getByText('0 de 5')).toBeInTheDocument();
+    expect(screen.getByText('1 de 5')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Preparar intento' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Repetición de palabra')).toHaveLength(2);
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it.each(FULL_SESSION_CASES)(
+    'completa cinco válidos en ruta %s con fuentes coherentes',
+    async (_caseName, modes) => {
+      const recognizer = new ControlledBrowserRecognizer();
+      const analyzeAudio = vi.fn().mockResolvedValue({
+        status: 'success',
+        metrics: SUCCESSFUL_AUDIO_METRICS,
+      });
+      const coachEvaluator = vi.fn((input: unknown) => evaluateCoach(input));
+      render(
+        <PracticeAttemptFlow
+          analyzeAudio={analyzeAudio}
+          browserRecognizer={recognizer}
+          evaluateCoach={coachEvaluator}
+        />,
+      );
+
+      for (const [attemptIndex, mode] of modes.entries()) {
+        const targetText = FULL_SESSION_TARGETS[attemptIndex];
+        expect(targetText).toBeDefined();
+        if (targetText === undefined) {
+          throw new Error('Falta el texto objetivo de la sesión de prueba.');
+        }
+        if (mode === 'demo') {
+          await analyzeCurrentDemoAttempt();
+        } else if (mode === 'manual') {
+          await analyzeCurrentManualAttempt(targetText);
+        } else {
+          await analyzeCurrentBrowserAttempt(recognizer, targetText);
+        }
+
+        if (attemptIndex < 4) {
+          await activateAfterAcceptedAttempt();
+        }
+      }
+
+      expect(screen.getByText('4 de 5')).toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Finalizar sesión' }),
+      );
+      expect(
+        await screen.findByRole('heading', {
+          name: 'Sesión técnica completada',
+        }),
+      ).toBeInTheDocument();
+      expect(coachEvaluator).toHaveBeenCalledTimes(5);
+      const coachInputs = coachEvaluator.mock.calls.map(
+        ([input]) => input as CoachInput,
+      );
+      expect(coachInputs.map(({ textSource }) => textSource)).toEqual(modes);
+      expect(
+        coachInputs.map(({ validAttemptCountBeforeCurrent }) =>
+          validAttemptCountBeforeCurrent,
+        ),
+      ).toEqual([0, 1, 2, 3, 4]);
+      expect(analyzeAudio).toHaveBeenCalledTimes(
+        modes.filter((mode) => mode !== 'demo').length,
+      );
+      expect(recognizer.startCount).toBe(
+        modes.filter((mode) => mode === 'browser').length,
+      );
+      expect(getUserMedia).toHaveBeenCalledTimes(
+        modes.filter((mode) => mode !== 'demo').length,
+      );
+    },
+  );
+
+  it('continúa una captura bloqueante sin registrarla y cancela voz en ambas transiciones', async () => {
+    const { output, synthesis } = createSpeechOutputHarness();
+    render(
+      <PracticeAttemptFlow
+        evaluateCoach={() => REPEAT_RESULT}
+        speechOutput={output}
+      />,
+    );
+    await analyzeCurrentDemoAttempt();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Escuchar devolución' }),
+    );
+    const cancelCountBeforeContinue = synthesis.cancel.mock.calls.length;
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /continuar de todas formas/i }),
+    );
+
+    expect(synthesis.cancel.mock.calls.length).toBeGreaterThan(
+      cancelCountBeforeContinue,
+    );
+    expect(screen.getByText('0 de 5')).toBeInTheDocument();
+    expect(
+      screen.getByText('La captura anterior no fue registrada.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/origen.*continuación de captura no registrada/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/no contará como intento válido/i),
+    ).toBeInTheDocument();
+    expect(getUserMedia).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Escuchar instrucción' }),
+    );
+    const cancelCountBeforeActivation = synthesis.cancel.mock.calls.length;
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Comenzar siguiente ejercicio' }),
+    );
+    expect(synthesis.cancel.mock.calls.length).toBeGreaterThan(
+      cancelCountBeforeActivation,
+    );
+    expect(screen.getByText('0 de 5')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Preparar intento' }),
+    ).toBeInTheDocument();
     expect(getUserMedia).not.toHaveBeenCalled();
   });
 
@@ -435,7 +729,7 @@ describe('PracticeAttemptFlow', () => {
     ).toBeInTheDocument();
   });
 
-  it('cancela feedback al continuar y muestra progreso 2 de 3 sin otra captura', async () => {
+  it('cancela feedback al continuar y muestra el siguiente v\u00e1lido sin otra captura', async () => {
     const { output, synthesis } = createSpeechOutputHarness();
     const coachEvaluator = vi.fn(evaluateCoach);
     render(
@@ -461,7 +755,11 @@ describe('PracticeAttemptFlow', () => {
     expect(synthesis.cancel.mock.calls.length).toBeGreaterThan(
       cancelCountBeforeContinue,
     );
-    expect(screen.getByText('Ejercicio 2 de 3')).toBeInTheDocument();
+    expect(screen.getByText('Intentos v\u00e1lidos registrados')).toBeInTheDocument();
+    expect(screen.getByText('Siguiente intento v\u00e1lido')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Comenzar siguiente ejercicio' }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText('Pronuncia la frase visible cuando estés listo.'),
     ).toBeInTheDocument();
@@ -570,7 +868,9 @@ describe('PracticeAttemptFlow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Analizar intento' }));
 
     expect(screen.getByRole('button', { name: 'Repetir este intento' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /continuar de todas formas/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /continuar de todas formas/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Preparar intento' })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Repetir este intento' }));
@@ -578,19 +878,34 @@ describe('PracticeAttemptFlow', () => {
     expect(getUserMedia).not.toHaveBeenCalled();
   });
 
-  it('muestra complete_session como error enfocado y sin feedback parcial', async () => {
+  it('mantiene complete_session pendiente hasta la acci\u00f3n expl\u00edcita', async () => {
     render(<PracticeAttemptFlow evaluateCoach={() => COMPLETE_RESULT} />);
     await openModeChoice();
     await userEvent.click(screen.getByRole('radio', { name: /demostración/i }));
     await userEvent.click(screen.getByRole('button', { name: 'Cargar datos simulados' }));
     await userEvent.click(screen.getByRole('button', { name: 'Analizar intento' }));
 
-    const errorTitle = await screen.findByRole('heading', {
-      name: 'No pudimos completar este paso',
-    });
-    expect(document.activeElement).toContainElement(errorTitle);
-    expect(screen.queryByRole('heading', { name: 'Devolución del intento' })).not.toBeInTheDocument();
-    expect(screen.queryByText('No debe mostrarse.')).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Devoluci\u00f3n del intento' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('No debe mostrarse.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Finalizar sesi\u00f3n' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', {
+        name: 'Sesi\u00f3n t\u00e9cnica completada',
+      }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Finalizar sesi\u00f3n' }),
+    );
+    expect(
+      await screen.findByRole('heading', {
+        name: 'No pudimos cambiar la sesi\u00f3n',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('recorre manual con audio real, texto confirmado y advertencia de procedencia', async () => {

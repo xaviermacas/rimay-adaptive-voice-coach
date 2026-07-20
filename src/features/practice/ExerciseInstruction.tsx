@@ -5,9 +5,9 @@ import { GuidedReadingText } from './GuidedReadingText';
 
 interface ExerciseInstructionProps {
   readonly exercise: Exercise;
-  readonly position: number;
+  readonly position?: number;
   readonly speech: SpeechOutputController;
-  readonly total: number;
+  readonly total?: number;
 }
 
 const EXERCISE_TYPE_LABELS = {
@@ -24,9 +24,11 @@ export function ExerciseInstruction({
 }: ExerciseInstructionProps) {
   return (
     <section aria-labelledby={`exercise-instruction-${exercise.id}`}>
-      <p className="text-sm font-bold text-rimay-700">
-        Ejercicio {position} de {total}
-      </p>
+      {position !== undefined && total !== undefined && (
+        <p className="text-sm font-bold text-rimay-700">
+          Ejercicio {position} de {total}
+        </p>
+      )}
       <h3
         className="mt-2 text-xl font-bold text-slate-950"
         id={`exercise-instruction-${exercise.id}`}

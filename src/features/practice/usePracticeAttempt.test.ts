@@ -58,21 +58,6 @@ const COMPLETE_RESULT: CoachResult = {
   },
 };
 
-const MISSING_SELECTION_RESULT: CoachResult = {
-  ok: true,
-  decision: {
-    rulesVersion: 'coach-rules-v1',
-    ruleId: 'continue_default',
-    templateId: 'continue-text-demo-v1',
-    shortFeedback: 'Continua.',
-    focus: 'continue',
-    action: 'continue',
-    explanation: 'Resultado de prueba.',
-    evidenceKeys: ['textSimilarity'],
-    selectedExerciseId: 'exercise-not-in-catalog',
-  },
-};
-
 describe('controlador de un intento', () => {
   it('ejecuta demo sin captura, reconocimiento ni analisis de audio', async () => {
     const recognizer = new BrowserRecognizerProbe();
@@ -131,7 +116,7 @@ describe('controlador de un intento', () => {
     expect(result.current.state.generation).toBe(3);
   });
 
-  it('trata complete_session como error recuperable en este incremento', async () => {
+  it('conserva complete_session como decisi\u00f3n lista para la sesi\u00f3n', async () => {
     const { result } = renderHook(() =>
       usePracticeAttempt({ evaluateCoach: () => COMPLETE_RESULT }),
     );
@@ -140,46 +125,8 @@ describe('controlador de un intento', () => {
     await act(async () => result.current.analyzeAttempt());
 
     expect(result.current.state).toMatchObject({
-      status: 'recoverable_error',
-      error: {
-        kind: 'application',
-        code: 'unexpected_coach_action',
-      },
+      status: 'decision_ready',
       coachResult: COMPLETE_RESULT,
     });
-  });
-
-  it('valida el ejercicio elegido al continuar', async () => {
-    const { result } = renderHook(() =>
-      usePracticeAttempt({ evaluateCoach: () => MISSING_SELECTION_RESULT }),
-    );
-    startDemo(result);
-    await act(async () => result.current.analyzeAttempt());
-
-    act(() => result.current.continueToPreview());
-
-    expect(result.current.state).toMatchObject({
-      status: 'recoverable_error',
-      error: {
-        kind: 'application',
-        code: 'selected_exercise_not_found',
-      },
-    });
-  });
-
-  it('limpia recursos y muestra solo la vista previa al continuar', async () => {
-    const { result } = renderHook(() => usePracticeAttempt());
-    startDemo(result);
-    await act(async () => result.current.analyzeAttempt());
-
-    act(() => result.current.continueToPreview());
-
-    expect(result.current.state).toMatchObject({
-      status: 'selection_preview',
-      selectedExercise: { id: EXERCISE_CATALOG[1].id },
-      generation: 2,
-    });
-    expect(result.current.recordedAudio).toBeNull();
-    expect(result.current.recognitionState.status).toBe('idle');
   });
 });

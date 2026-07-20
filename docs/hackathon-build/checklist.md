@@ -574,7 +574,7 @@ Recorrer demo, browser y manual con voz española disponible, carga tardía y si
 
 ## Incremento 7 — Sesión de cinco intentos y adaptación completa
 
-**Estado: NO INICIADO**
+**Estado: COMPLETADO — 2026-07-20**
 
 **Objetivo**
 
@@ -715,6 +715,37 @@ La validación manual en Chrome y Edge recorre cinco válidos consecutivos, sile
 - Tramo D — finalización, progreso, voz, limpieza y nueva sesión.
 - Tramo E — matriz automática, Chrome/Edge y revisión completa.
 - Los cinco tramos forman un único incremento formal. No se crean commits parciales y ningún tramo autoriza persistencia o el incremento 8.
+
+**Resultado automático observado — 2026-07-19**
+
+- [x] Tramo A: se implementaron `SessionAttemptRecord`, la unión discriminada de sesión, `validHistory` como única fuente de verdad, cobertura derivada, transiciones puras, validación de historial y snapshots profundos congelados sin audio ni estado temporal.
+- [x] Tramo B: el controlador de sesión envuelve el intento vigente, construye cada `CoachInput` con el ejercicio y el historial reales y activa palabra → frase → lectura mediante preview y clic explícito, sin captura o coaching automáticos.
+- [x] Tramo C: los intentos 4–5 usan `coach-rules-v1` y la política de candidatos existentes; repetir conserva ejercicio y no registra, mientras continuar de todas formas conserva dificultad, usa cobertura real, no modifica la decisión y no suma el intento bloqueante.
+- [x] Tramo D: la sesión sólo completa al aceptar explícitamente el quinto intento válido, no crea un sexto, muestra la vista técnica permitida, cancela voz y permite una nueva sesión limpia en 0 de 5.
+- [x] Identidad y concurrencia: los IDs siguen siendo monotónicos y sin reloj o aleatoriedad; doble aceptación, doble activación, doble finalización y resultados tardíos no duplican registros ni contaminan otra generación.
+- [x] Demo: cada ejercicio usa fixtures acústicos y textuales locales coherentes con su objetivo, sin micrófono, `MediaRecorder`, reconocimiento, audio del usuario, red o persistencia.
+- [x] Puerta A: `npm.cmd run typecheck`, código 0; `npm.cmd test -- session`, 1 archivo y 7/7 pruebas en el primer corte de la máquina pura.
+- [x] Puerta B: `npm.cmd run typecheck`, código 0; sesión 2 archivos y 10/10; práctica 8 archivos y 40/40.
+- [x] Puerta C: `npm.cmd run typecheck`, código 0; sesión 2 archivos y 13/13; adaptación 15/15; política de candidatos 10/10; práctica 9 archivos y 44/44.
+- [x] Puerta D: TypeScript estricto, 22/22 pruebas integrales de `PracticeAttemptFlow` y 15/15 pruebas de sesión, incluidos cinco válidos browser, cinco manuales, mezcla de modos, quinto bloqueante, nueva sesión, foco y cancelación de voz.
+- [x] Verificación automática final posterior a documentación: lint sin errores ni advertencias; typecheck con código 0; práctica 9 archivos y 51/51; coaching 4 archivos y 104/104; suite completa 32 archivos y 339/339; build estático con 70 módulos transformados.
+- [x] `package.json` y `package-lock.json` permanecen intactos. No se añadieron dependencias, persistencia, roles, resumen, backend, Supabase, OpenAI ni código del incremento 8.
+- [x] Validación manual final completada en Chrome y Edge mediante sesiones completas con demo y entrada manual. `SpeechRecognition` no produjo un resultado utilizable durante esta validación; el fallo o la indisponibilidad no bloquearon el recorrido y el fallback manual permitió continuarlo.
+
+**Evidencia de validación manual final y cierre — 2026-07-20**
+
+- [x] Chrome y Edge aprobaron la sesión completa de cinco intentos mediante demo y entrada manual. El reconocimiento browser se conserva como mejora progresiva y no es requisito para completar cinco intentos válidos.
+- [x] La sesión inició en 0 de 5 con `practice-word-casa`; analizar no registró y sólo “Continuar” aceptó una decisión `continue`.
+- [x] Los tres primeros válidos siguieron palabra → frase → lectura guiada y cubrieron los tres tipos obligatorios; los intentos cuarto y quinto utilizaron la adaptación determinista vigente.
+- [x] Una captura bloqueante no incrementó el contador ni aportó cobertura. `repeat_current` conservó el ejercicio y limpió los datos temporales; “Continuar de todas formas” no registró la captura y la preview exigió “Comenzar siguiente ejercicio”.
+- [x] Una quinta captura bloqueante mantuvo la sesión en 4 de 5. Analizar el quinto válido no completó automáticamente; sólo “Finalizar sesión” registró el quinto intento.
+- [x] `completed` mostró únicamente los resultados técnicos autorizados y no creó un sexto intento. “Iniciar nueva sesión” limpió el historial y regresó a palabra y 0 de 5.
+- [x] La voz se canceló antes de capturar, repetir, continuar, activar otro ejercicio, finalizar e iniciar otra sesión. No existió autoplay y se limpiaron micrófono y recursos temporales.
+- [x] Console permaneció sin errores. Rimay no realizó solicitudes propias con audio, texto, métricas, decisiones o historial; Local Storage, Session Storage, IndexedDB y Cache no recibieron datos de sesión.
+- [x] Teclado, foco visible, zoom 200 % y reflow funcionaron correctamente en ambos navegadores. No se informó una comprobación manual de lector de pantalla durante este cierre.
+- [x] Todo permaneció en memoria. No existe límite total de capturas; sólo cuentan intentos válidos aceptados. No existe resumen clínico o profesional y no hubo revisión clínica o profesional externa.
+
+**Cierre:** el responsable confirmó la validación manual técnica y funcional final en Chrome y Edge. El incremento 7 queda completado con dictamen `APTO PARA CERRAR`, sin defectos materiales conocidos. `SpeechRecognition` no produjo un resultado utilizable durante la prueba y el fallback manual funcionó correctamente. No se inicia el incremento 8.
 
 ## Incremento 8 — Persistencia local, roles y eliminación total
 

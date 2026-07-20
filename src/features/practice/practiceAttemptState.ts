@@ -14,7 +14,6 @@ export type CoachSuccessResult = Extract<CoachResult, { readonly ok: true }>;
 interface PracticeStateBase {
   readonly attemptId: string;
   readonly generation: number;
-  readonly currentExercise: Exercise;
 }
 
 export interface InstructionState extends PracticeStateBase {
@@ -77,11 +76,6 @@ export interface RecoverableErrorState extends PracticeStateBase {
   readonly coachResult: CoachResult | null;
 }
 
-export interface SelectionPreviewState extends PracticeStateBase {
-  readonly status: 'selection_preview';
-  readonly selectedExercise: Exercise;
-}
-
 export type PracticeAttemptState =
   | InstructionState
   | PrivacyChoiceState
@@ -92,8 +86,7 @@ export type PracticeAttemptState =
   | ReadyToAnalyzeState
   | AnalyzingState
   | DecisionReadyState
-  | RecoverableErrorState
-  | SelectionPreviewState;
+  | RecoverableErrorState;
 
 export type PracticeAttemptEvent =
   | {
@@ -144,26 +137,19 @@ export type PracticeAttemptEvent =
       readonly type: 'restart';
       readonly attemptId: string;
       readonly generation: number;
-    }
-  | {
-      readonly type: 'show_selection_preview';
-      readonly generation: number;
-      readonly selectedExercise: Exercise;
     };
 
 export function createInitialPracticeState(
   attemptId: string,
   generation: number,
-  currentExercise: Exercise,
 ): InstructionState {
-  return { status: 'instruction', attemptId, generation, currentExercise };
+  return { status: 'instruction', attemptId, generation };
 }
 
 function baseFrom(state: PracticeAttemptState): PracticeStateBase {
   return {
     attemptId: state.attemptId,
     generation: state.generation,
-    currentExercise: state.currentExercise,
   };
 }
 
@@ -335,17 +321,7 @@ export function transitionPracticeAttempt(
       return createInitialPracticeState(
         event.attemptId,
         event.generation,
-        state.currentExercise,
       );
-    case 'show_selection_preview':
-      return state.status === 'decision_ready'
-        ? {
-            ...base,
-            generation: event.generation,
-            status: 'selection_preview',
-            selectedExercise: event.selectedExercise,
-          }
-        : state;
   }
 }
 
@@ -355,6 +331,8 @@ interface BuildCoachInputOptions {
   readonly audioMetrics: DeterministicMetrics;
   readonly textMetrics: TextMetrics | null;
   readonly allowedExercises: readonly Exercise[];
+  readonly validAttemptCountBeforeCurrent: number;
+  readonly coveredExerciseTypesBeforeCurrent: CoachInput['coveredExerciseTypesBeforeCurrent'];
 }
 
 export function buildPracticeCoachInput({
@@ -363,6 +341,8 @@ export function buildPracticeCoachInput({
   audioMetrics,
   textMetrics,
   allowedExercises,
+  validAttemptCountBeforeCurrent,
+  coveredExerciseTypesBeforeCurrent,
 }: BuildCoachInputOptions): CoachInput {
   return {
     attemptId,
@@ -371,8 +351,8 @@ export function buildPracticeCoachInput({
     audioMetrics,
     textMetrics,
     currentDifficulty: currentExercise.difficulty,
-    validAttemptCountBeforeCurrent: 0,
-    coveredExerciseTypesBeforeCurrent: [],
+    validAttemptCountBeforeCurrent,
+    coveredExerciseTypesBeforeCurrent,
     allowedExercises,
   };
 }

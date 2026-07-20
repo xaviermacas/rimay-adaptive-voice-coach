@@ -15,8 +15,12 @@ describe('App', () => {
 
     expect(screen.getByText('Sin backend')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: /un intento de una palabra/i }),
+      screen.getByRole('heading', {
+        name: /sesión de cinco intentos válidos/i,
+      }),
     ).toBeInTheDocument();
+    expect(screen.getByText('0 de 5')).toBeInTheDocument();
+    expect(screen.getByText('1 de 5')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /preparar intento/i }),
     ).toBeInTheDocument();

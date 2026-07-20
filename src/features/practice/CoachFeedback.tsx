@@ -5,6 +5,8 @@ import { CoachEvidence } from './CoachEvidenceView';
 
 interface CoachFeedbackProps {
   readonly onContinue: () => void;
+  readonly onContinueAnyway: () => void;
+  readonly onFinish: () => void;
   readonly onRepeat: () => void;
   readonly speech: SpeechOutputController;
   readonly state: DecisionReadyState;
@@ -27,6 +29,8 @@ const SOURCE_LABELS = {
 
 export function CoachFeedback({
   onContinue,
+  onContinueAnyway,
+  onFinish,
   onRepeat,
   speech,
   state,
@@ -73,7 +77,9 @@ export function CoachFeedback({
           value={
             decision.action === 'repeat_current'
               ? 'Repetir el intento actual'
-              : 'Continuar al siguiente ejercicio'
+              : decision.action === 'continue'
+                ? 'Continuar al siguiente ejercicio'
+                : 'Finalizar la sesi\u00f3n'
           }
         />
         <SummaryItem label="Versión de reglas" value={decision.rulesVersion} />
@@ -101,15 +107,24 @@ export function CoachFeedback({
         constituye diagnóstico ni recomendación terapéutica.
       </p>
 
-      <div className="mt-6">
+      <div className="mt-6 flex flex-wrap gap-3">
         {decision.action === 'repeat_current' && (
-          <button
-            className="min-h-11 rounded-xl bg-rimay-700 px-5 py-3 font-semibold text-white hover:bg-rimay-900"
-            onClick={onRepeat}
-            type="button"
-          >
-            Repetir este intento
-          </button>
+          <>
+            <button
+              className="min-h-11 rounded-xl bg-rimay-700 px-5 py-3 font-semibold text-white hover:bg-rimay-900"
+              onClick={onRepeat}
+              type="button"
+            >
+              Repetir este intento
+            </button>
+            <button
+              className="min-h-11 rounded-xl border-2 border-amber-700 bg-white px-5 py-3 font-semibold text-amber-950 hover:bg-amber-50"
+              onClick={onContinueAnyway}
+              type="button"
+            >
+              Continuar de todas formas
+            </button>
+          </>
         )}
         {decision.action === 'continue' && (
           <button
@@ -118,6 +133,15 @@ export function CoachFeedback({
             type="button"
           >
             Continuar
+          </button>
+        )}
+        {decision.action === 'complete_session' && (
+          <button
+            className="min-h-11 rounded-xl bg-rimay-700 px-5 py-3 font-semibold text-white hover:bg-rimay-900"
+            onClick={onFinish}
+            type="button"
+          >
+            Finalizar sesión
           </button>
         )}
       </div>

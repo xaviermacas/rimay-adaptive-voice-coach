@@ -30,6 +30,8 @@ function coachInput() {
     audioMetrics: { ...DEMO_AUDIO_METRICS_FIXTURE, pauseCount: 2 },
     textMetrics: textResult.metrics,
     allowedExercises: EXERCISE_CATALOG,
+    validAttemptCountBeforeCurrent: 0,
+    coveredExerciseTypesBeforeCurrent: [],
   });
 }
 

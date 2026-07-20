@@ -1,9 +1,5 @@
 import { useEffect, useRef } from 'react';
 
-import {
-  INITIAL_EXERCISE_SEQUENCE,
-  getInitialSequencePosition,
-} from '../../domain/exercises';
 import { AudioMetricsSummary } from '../audio-analysis/AudioMetricsSummary';
 import { TextMetricsSummary } from '../speech-recognition';
 import {
@@ -13,13 +9,17 @@ import {
 } from '../speech-output';
 import { CoachFeedback } from './CoachFeedback';
 import { ExerciseInstruction } from './ExerciseInstruction';
+import { SessionComplete } from './SessionComplete';
+import { SessionProgress } from './SessionProgress';
 import {
-  usePracticeAttempt,
   type PracticeAttemptController,
-  type UsePracticeAttemptOptions,
 } from './usePracticeAttempt';
+import {
+  usePracticeSession,
+  type UsePracticeSessionOptions,
+} from './usePracticeSession';
 
-interface PracticeAttemptFlowProps extends UsePracticeAttemptOptions {
+interface PracticeAttemptFlowProps extends UsePracticeSessionOptions {
   readonly speechOutput?: BrowserSpeechOutput | undefined;
 }
 
@@ -41,34 +41,51 @@ const FLOW_STATUS_MESSAGES = {
   decision_ready: 'La devolución del intento está lista.',
   recoverable_error: 'El recorrido necesita una acción para continuar.',
   selection_preview: 'Vista previa del siguiente ejercicio.',
+  completed: 'La sesión técnica está completada.',
 } as const;
 
 export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
   const { speechOutput, ...practiceOptions } = props;
   const speech = useSpeechOutput({ output: speechOutput });
-  const controller = usePracticeAttempt({
+  const controller = usePracticeSession({
     ...practiceOptions,
     stopSpeech: speech.stop,
   });
+  const attempt = controller.attempt;
   const feedbackFocusRef = useRef<HTMLDivElement>(null);
   const errorFocusRef = useRef<HTMLDivElement>(null);
   const previewFocusRef = useRef<HTMLDivElement>(null);
-  const previousStatusRef = useRef(controller.state.status);
+  const completeFocusRef = useRef<HTMLDivElement>(null);
+  const visibleStatus =
+    controller.state.status === 'in_progress'
+      ? attempt.state.status
+      : controller.state.status;
+  const previousStatusRef = useRef(visibleStatus);
 
   useEffect(() => {
-    if (previousStatusRef.current === controller.state.status) {
+    if (previousStatusRef.current === visibleStatus) {
       return;
     }
-    previousStatusRef.current = controller.state.status;
+    previousStatusRef.current = visibleStatus;
 
-    if (controller.state.status === 'decision_ready') {
+    if (visibleStatus === 'decision_ready') {
       feedbackFocusRef.current?.focus();
-    } else if (controller.state.status === 'recoverable_error') {
+    } else if (visibleStatus === 'recoverable_error') {
       errorFocusRef.current?.focus();
-    } else if (controller.state.status === 'selection_preview') {
+    } else if (visibleStatus === 'selection_preview') {
       previewFocusRef.current?.focus();
+    } else if (visibleStatus === 'completed') {
+      completeFocusRef.current?.focus();
     }
-  }, [controller.state.status]);
+  }, [visibleStatus]);
+
+  if (controller.state.status === 'completed') {
+    return (
+      <div ref={completeFocusRef} tabIndex={-1}>
+        <SessionComplete onStartNewSession={controller.startNewSession} />
+      </div>
+    );
+  }
 
   return (
     <section aria-labelledby="practice-flow-title">
@@ -82,7 +99,7 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
               className="mt-1 text-2xl font-bold text-slate-950"
               id="practice-flow-title"
             >
-              Un intento de una palabra
+              Sesión de cinco intentos válidos
             </h2>
           </div>
           <span className="inline-flex min-h-11 items-center self-start rounded-full bg-rimay-50 px-4 text-sm font-semibold text-rimay-900">
@@ -92,7 +109,7 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
 
         <p className="mt-4 max-w-3xl leading-7 text-slate-700">
           Rimay no envía ni guarda la grabación. El audio real permanece sólo en
-          memoria durante este intento y se descarta al reiniciar, continuar o
+          memoria durante el intento actual y se descarta al reiniciar, continuar o
           cerrar la página.
         </p>
         <p className="mt-2 text-sm font-semibold text-slate-600">
@@ -106,25 +123,34 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
           role="status"
         >
           <span className="font-semibold">Estado: </span>
-          {FLOW_STATUS_MESSAGES[controller.state.status]}
+          {visibleStatus === 'selection_preview'
+            ? 'Vista previa del siguiente ejercicio; espera tu activaci\u00f3n.'
+            : FLOW_STATUS_MESSAGES[visibleStatus]}
         </div>
 
-        <FlowBody controller={controller} speech={speech} />
+        <SessionProgress state={controller.state} />
+        {controller.state.status === 'in_progress' && (
+          <FlowBody controller={attempt} speech={speech} />
+        )}
       </div>
 
-      {controller.state.status === 'decision_ready' && (
+      {controller.state.status === 'in_progress' &&
+        attempt.state.status === 'decision_ready' && (
         <div className="mt-8" ref={feedbackFocusRef} tabIndex={-1}>
           <CoachFeedback
-            onContinue={controller.continueToPreview}
-            onRepeat={controller.repeatAttempt}
+            onContinue={controller.acceptCurrentAttempt}
+            onContinueAnyway={controller.continueBlockingAttempt}
+            onFinish={controller.finishSession}
+            onRepeat={controller.repeatCurrentAttempt}
             speech={speech}
-            state={controller.state}
+            state={attempt.state}
           />
-          <TechnicalResults controller={controller} />
+          <TechnicalResults controller={attempt} />
         </div>
       )}
 
-      {controller.state.status === 'recoverable_error' && (
+      {controller.state.status === 'in_progress' &&
+        attempt.state.status === 'recoverable_error' && (
         <div
           aria-labelledby="practice-error-title"
           className="mt-8 rounded-3xl border border-red-300 bg-red-50 p-6 text-red-950 shadow-sm sm:p-8"
@@ -135,25 +161,25 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
           <h2 className="text-2xl font-bold" id="practice-error-title">
             No pudimos completar este paso
           </h2>
-          <p className="mt-3 leading-7">{controller.state.error.message}</p>
-          {controller.state.playbackAvailable && (
-            <Playback controller={controller} />
+          <p className="mt-3 leading-7">{attempt.state.error.message}</p>
+          {attempt.state.playbackAvailable && (
+            <Playback controller={attempt} />
           )}
           <div className="mt-5 flex flex-wrap gap-3">
-            {(controller.state.error.kind === 'audio_analysis' ||
-              controller.state.error.kind === 'coaching') && (
+            {(attempt.state.error.kind === 'audio_analysis' ||
+              attempt.state.error.kind === 'coaching') && (
               <button
                 className="min-h-11 rounded-xl border-2 border-rimay-700 bg-white px-5 py-3 font-semibold text-rimay-900 hover:bg-rimay-50"
-                onClick={controller.retryAnalysis}
+                onClick={attempt.retryAnalysis}
                 type="button"
               >
                 Preparar reanálisis
               </button>
             )}
-            {controller.state.playbackAvailable && (
+            {attempt.state.playbackAvailable && (
               <button
                 className="min-h-11 rounded-xl border-2 border-violet-700 bg-white px-5 py-3 font-semibold text-violet-950 hover:bg-violet-50"
-                onClick={controller.editText}
+                onClick={attempt.editText}
                 type="button"
               >
                 Corregir el texto
@@ -161,12 +187,29 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
             )}
             <button
               className="min-h-11 rounded-xl bg-rimay-700 px-5 py-3 font-semibold text-white hover:bg-rimay-900"
-              onClick={controller.discardAttempt}
+              onClick={controller.restartCurrentAttempt}
               type="button"
             >
               Reiniciar intento
             </button>
           </div>
+        </div>
+      )}
+
+      {controller.sessionError !== null && (
+        <div
+          className="mt-8 rounded-3xl border border-red-300 bg-red-50 p-6 text-red-950 shadow-sm"
+          role="alert"
+        >
+          <h2 className="text-xl font-bold">No pudimos cambiar la sesión</h2>
+          <p className="mt-2 leading-7">{controller.sessionError.message}</p>
+          <button
+            className="mt-4 min-h-11 rounded-xl border-2 border-red-800 bg-white px-5 py-3 font-semibold"
+            onClick={controller.clearSessionError}
+            type="button"
+          >
+            Revisar el intento
+          </button>
         </div>
       )}
 
@@ -186,22 +229,34 @@ export function PracticeAttemptFlow(props: PracticeAttemptFlowProps) {
           >
             Siguiente ejercicio
           </h2>
+          <p className="mt-3 text-sm font-semibold text-sky-950">
+            Origen de la vista previa:{' '}
+            {controller.state.origin === 'accepted_valid_attempt'
+              ? 'intento válido aceptado'
+              : 'continuación de captura no registrada'}
+          </p>
+          {controller.state.captureNotice !== null && (
+            <p className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 font-semibold leading-7 text-amber-950">
+              {controller.state.captureNotice}
+            </p>
+          )}
           <div className="mt-5">
             <ExerciseInstruction
-              exercise={controller.state.selectedExercise}
-              position={
-                getInitialSequencePosition(
-                  controller.state.selectedExercise.id,
-                ) ?? 1
-              }
+              exercise={controller.state.pendingExercise}
               speech={speech}
-              total={INITIAL_EXERCISE_SEQUENCE.length}
             />
           </div>
           <p className="mt-5 text-sm font-semibold leading-6 text-sky-950">
-            Esta vista previa no inicia otra grabación, no crea un segundo
-            intento y no vuelve a ejecutar las reglas.
+            Esta vista previa no inicia grabación, reconocimiento ni una nueva
+            evaluación de reglas.
           </p>
+          <button
+            className="mt-5 min-h-11 rounded-xl bg-rimay-700 px-5 py-3 font-semibold text-white hover:bg-rimay-900"
+            onClick={controller.activatePendingExercise}
+            type="button"
+          >
+            Comenzar siguiente ejercicio
+          </button>
         </section>
       )}
     </section>
@@ -221,10 +276,8 @@ function FlowBody({
     return (
       <div className="mt-6">
         <ExerciseInstruction
-          exercise={state.currentExercise}
-          position={getInitialSequencePosition(state.currentExercise.id) ?? 1}
+          exercise={controller.currentExercise}
           speech={speech}
-          total={INITIAL_EXERCISE_SEQUENCE.length}
         />
         <button
           className="mt-6 min-h-11 rounded-xl bg-rimay-700 px-5 py-3 font-semibold text-white hover:bg-rimay-900"
@@ -341,7 +394,7 @@ function FlowBody({
     return (
       <div className="mt-6">
         <p className="text-lg font-semibold text-slate-950">
-          Pronuncia: “{state.currentExercise.targetText}”
+          Pronuncia: “{controller.currentExercise.targetText}”
         </p>
         {state.mode === 'browser' &&
           controller.recognitionState.interimText !== '' && (

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import { AUDIO_METRICS_V1_CONFIG } from '../../config/audioAnalysis';
-import type { SpeechRecognizer } from '../../domain/contracts';
+import type { Exercise, SpeechRecognizer } from '../../domain/contracts';
 import { evaluateCoach as evaluateCoachDefault, type CoachResult } from '../../domain/coaching';
 import {
   EXERCISE_CATALOG,
   INITIAL_EXERCISE,
-  findExerciseById,
 } from '../../domain/exercises';
 import { calculateTextMetrics, createSpeechTextResult } from '../../domain/text';
 import { analyzeAudioBlob } from '../audio-analysis/analyzeAudio';
@@ -14,7 +13,6 @@ import type { AudioBlobAnalyzer } from '../audio-analysis/useAudioAnalysis';
 import { useAudioRecorder } from '../recording/useAudioRecorder';
 import { useSpeechRecognition } from '../speech-recognition/useSpeechRecognition';
 import {
-  applicationPracticeError,
   audioAnalysisPracticeError,
   coachingPracticeError,
   emptyManualTextError,
@@ -31,25 +29,29 @@ import {
   type PracticeMode,
 } from './practiceAttemptState';
 import {
-  DEMO_AUDIO_METRICS_FIXTURE,
-  DEMO_SPEECH_TEXT_FIXTURE,
-} from './demoFixtures';
+  deriveSessionCoverage,
+  type SessionAttemptRecord,
+} from './practiceSessionState';
+import { getDemoAttemptFixtures } from './demoFixtures';
 
 export interface UsePracticeAttemptOptions {
   readonly analyzeAudio?: AudioBlobAnalyzer;
   readonly browserRecognizer?: SpeechRecognizer;
   readonly evaluateCoach?: (input: unknown) => CoachResult;
   readonly stopSpeech?: (() => void) | undefined;
+  readonly currentExercise?: Exercise;
+  readonly validHistory?: readonly SessionAttemptRecord[];
 }
 
 export interface PracticeAttemptController {
   readonly analyzeAttempt: () => Promise<void>;
   readonly browserRecognitionIsSupported: boolean;
+  readonly clearAttemptForSessionTransition: () => void;
   readonly chooseMode: (mode: PracticeMode) => void;
   readonly confirmManualText: () => void;
   readonly consentAccepted: boolean;
-  readonly continueToPreview: () => void;
   readonly continueWithoutText: () => void;
+  readonly currentExercise: Exercise;
   readonly discardAttempt: () => void;
   readonly editText: () => void;
   readonly manualInputError: PracticeAttemptError | null;
@@ -62,6 +64,7 @@ export interface PracticeAttemptController {
   readonly setConsentAccepted: (accepted: boolean) => void;
   readonly setManualText: (text: string) => void;
   readonly startAttempt: () => void;
+  readonly startNewAttempt: () => void;
   readonly state: PracticeAttemptState;
   readonly stopRecording: () => void;
   readonly switchToManual: () => void;
@@ -74,6 +77,7 @@ const ACTIVE_RECOGNITION_STATUSES = new Set([
 ] as const);
 
 const DO_NOTHING = () => undefined;
+const EMPTY_VALID_HISTORY: readonly SessionAttemptRecord[] = Object.freeze([]);
 
 function recognitionIsTerminal(
   status: PracticeAttemptController['recognitionState']['status'],
@@ -89,13 +93,15 @@ export function usePracticeAttempt(
   const analyzeAudio = options.analyzeAudio ?? analyzeAudioBlob;
   const coachEvaluator = options.evaluateCoach ?? evaluateCoachDefault;
   const stopSpeech = options.stopSpeech ?? DO_NOTHING;
+  const currentExercise = options.currentExercise ?? INITIAL_EXERCISE;
+  const validHistory = options.validHistory ?? EMPTY_VALID_HISTORY;
   const recorder = useAudioRecorder();
   const recognition = useSpeechRecognition({
     browserRecognizer: options.browserRecognizer,
   });
   const [state, dispatch] = useReducer(
     transitionPracticeAttempt,
-    createInitialPracticeState('practice-attempt-1', 1, INITIAL_EXERCISE),
+    createInitialPracticeState('practice-attempt-1', 1),
   );
   const [manualText, setManualTextValue] = useState('');
   const [manualInputError, setManualInputError] =
@@ -125,6 +131,10 @@ export function usePracticeAttempt(
       attemptId: `practice-attempt-${attemptSequenceRef.current}`,
       generation,
     });
+  }, [invalidateAttemptResources]);
+
+  const clearAttemptForSessionTransition = useCallback(() => {
+    invalidateAttemptResources();
   }, [invalidateAttemptResources]);
 
   useEffect(() => {
@@ -217,7 +227,10 @@ export function usePracticeAttempt(
     stopSpeech();
 
     if (state.mode === 'demo') {
-      dispatch({ type: 'demo_ready', speechText: DEMO_SPEECH_TEXT_FIXTURE });
+      dispatch({
+        type: 'demo_ready',
+        speechText: getDemoAttemptFixtures(currentExercise).speechText,
+      });
       return;
     }
 
@@ -238,7 +251,7 @@ export function usePracticeAttempt(
     if (state.mode === 'browser') {
       recognition.start('browser');
     }
-  }, [recognition, recorder, state, stopSpeech]);
+  }, [currentExercise, recognition, recorder, state, stopSpeech]);
 
   const stopRecording = useCallback(() => {
     if (state.status !== 'recording') {
@@ -299,13 +312,16 @@ export function usePracticeAttempt(
     const operationId = analysisOperationRef.current + 1;
     analysisOperationRef.current = operationId;
     const generation = generationRef.current;
-    const { attemptId, currentExercise, mode, speechText } = state;
+    const { attemptId, mode, speechText } = state;
     dispatch({ type: 'analysis_started' });
 
     try {
       const audioResult =
         mode === 'demo'
-          ? { status: 'success' as const, metrics: DEMO_AUDIO_METRICS_FIXTURE }
+          ? {
+              status: 'success' as const,
+              metrics: getDemoAttemptFixtures(currentExercise).audioMetrics,
+            }
           : recorder.recordedAudio === null
             ? {
                 status: 'error' as const,
@@ -366,7 +382,10 @@ export function usePracticeAttempt(
           });
           return;
         }
-        textMetrics = textResult.metrics;
+        textMetrics = Object.freeze({
+          ...textResult.metrics,
+          targetText: currentExercise.targetText,
+        });
       }
 
       const coachInput = buildPracticeCoachInput({
@@ -375,6 +394,8 @@ export function usePracticeAttempt(
         audioMetrics: audioResult.metrics,
         textMetrics,
         allowedExercises: EXERCISE_CATALOG,
+        validAttemptCountBeforeCurrent: validHistory.length,
+        coveredExerciseTypesBeforeCurrent: deriveSessionCoverage(validHistory),
       });
       const coachResult = coachEvaluator(coachInput);
       if (!coachResult.ok) {
@@ -389,19 +410,6 @@ export function usePracticeAttempt(
         });
         return;
       }
-      if (coachResult.decision.action === 'complete_session') {
-        stopSpeech();
-        dispatch({
-          type: 'recoverable_error',
-          error: applicationPracticeError('unexpected_coach_action'),
-          playbackAvailable: recorder.recordedAudio !== null,
-          speechText,
-          coachInput,
-          coachResult,
-        });
-        return;
-      }
-
       dispatch({ type: 'decision_ready', coachInput, coachResult });
     } finally {
       if (analysisOperationRef.current === operationId) {
@@ -418,6 +426,8 @@ export function usePracticeAttempt(
     recorder.recordedAudio,
     state,
     stopSpeech,
+    currentExercise,
+    validHistory,
   ]);
 
   const repeatAttempt = useCallback(() => {
@@ -430,41 +440,6 @@ export function usePracticeAttempt(
     stopSpeech();
     restartWithNewAttempt();
   }, [restartWithNewAttempt, state, stopSpeech]);
-
-  const continueToPreview = useCallback(() => {
-    if (
-      state.status !== 'decision_ready' ||
-      state.coachResult.decision.action !== 'continue'
-    ) {
-      return;
-    }
-
-    stopSpeech();
-
-    const selectedExerciseId = state.coachResult.decision.selectedExerciseId;
-    const selectedExercise =
-      selectedExerciseId === null
-        ? undefined
-        : findExerciseById(selectedExerciseId);
-    if (selectedExerciseId === null || selectedExercise === undefined) {
-      dispatch({
-        type: 'recoverable_error',
-        error: applicationPracticeError('selected_exercise_not_found'),
-        playbackAvailable: recorder.recordedAudio !== null,
-        speechText: null,
-        coachInput: state.coachInput,
-        coachResult: state.coachResult,
-      });
-      return;
-    }
-
-    const generation = invalidateAttemptResources();
-    dispatch({
-      type: 'show_selection_preview',
-      generation,
-      selectedExercise,
-    });
-  }, [invalidateAttemptResources, recorder.recordedAudio, state, stopSpeech]);
 
   const discardAttempt = useCallback(() => {
     stopSpeech();
@@ -486,14 +461,15 @@ export function usePracticeAttempt(
   return {
     analyzeAttempt,
     browserRecognitionIsSupported: recognition.browserIsSupported,
+    clearAttemptForSessionTransition,
     chooseMode,
     confirmManualText,
     consentAccepted:
       state.status === 'privacy_choice' && state.mode === 'browser'
         ? state.consentAccepted
         : false,
-    continueToPreview,
     continueWithoutText,
+    currentExercise,
     discardAttempt,
     editText,
     manualInputError,
@@ -506,6 +482,7 @@ export function usePracticeAttempt(
     setConsentAccepted,
     setManualText,
     startAttempt,
+    startNewAttempt: restartWithNewAttempt,
     state,
     stopRecording,
     switchToManual,

@@ -11,11 +11,6 @@ import type {
   RecordingError,
 } from '../recording/recordingSupport';
 
-export type PracticeApplicationErrorCode =
-  | 'unexpected_coach_action'
-  | 'selected_exercise_not_found'
-  | 'stale_async_result';
-
 export type PracticeAttemptError =
   | {
       readonly kind: 'recording';
@@ -40,11 +35,6 @@ export type PracticeAttemptError =
   | {
       readonly kind: 'coaching';
       readonly code: CoachErrorCode;
-      readonly message: string;
-    }
-  | {
-      readonly kind: 'application';
-      readonly code: PracticeApplicationErrorCode;
       readonly message: string;
     };
 
@@ -134,19 +124,4 @@ export function coachingPracticeError(error: CoachError): PracticeAttemptError {
     code: error.code,
     message: COACH_ERROR_MESSAGES[error.code],
   };
-}
-
-export function applicationPracticeError(
-  code: PracticeApplicationErrorCode,
-): PracticeAttemptError {
-  const messages: Readonly<Record<PracticeApplicationErrorCode, string>> = {
-    unexpected_coach_action:
-      'La devolución produjo una acción que no corresponde a este recorrido. Reinicia el intento.',
-    selected_exercise_not_found:
-      'No pudimos preparar la vista previa del siguiente ejercicio. Reinicia el intento.',
-    stale_async_result:
-      'Se ignoró un resultado anterior porque el intento ya había cambiado.',
-  };
-
-  return { kind: 'application', code, message: messages[code] };
 }
