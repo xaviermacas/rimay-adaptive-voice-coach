@@ -47,7 +47,9 @@ export function useSpeechOutput(
 
   useEffect(() => {
     mountedRef.current = true;
-    const unsubscribe = output.subscribe((snapshot) => {
+    const updateFromSnapshot = (
+      snapshot: SpeechOutputAvailabilitySnapshot,
+    ) => {
       if (!mountedRef.current) {
         return;
       }
@@ -58,8 +60,10 @@ export function useSpeechOutput(
             : current
           : stateFromSnapshot(snapshot),
       );
-    });
+    };
+    const unsubscribe = output.subscribe(updateFromSnapshot);
     output.connect();
+    updateFromSnapshot(output.getSnapshot());
 
     return () => {
       mountedRef.current = false;

@@ -1,6 +1,6 @@
 # Checklist de versión candidata y entrega
 
-Las casillas marcadas corresponden a evidencia observada en el repositorio o a validación manual histórica. El primer hotfix fue desplegado y ambos P1 se reprodujeron con evidencia nueva; la versión no vuelve a considerarse validada hasta desplegar la segunda corrección y repetir Chrome y Edge.
+Las casillas marcadas corresponden a evidencia observada en el repositorio o a validación manual histórica. El audio ya fue validado sobre `113754e`, pero la voz conservó una carrera entre snapshot y suscripción; la versión no vuelve a considerarse validada hasta desplegar esta corrección final y repetir Chrome y Edge.
 
 ## Código congelado
 
@@ -21,10 +21,10 @@ Ejecutar la matriz completa sobre el árbol documental final. Registrar cantidad
 - [x] `npm.cmd test -- session`: 2 archivos y 15/15 pruebas.
 - [x] `npm.cmd test -- practice`: 9 archivos y 51/51 pruebas.
 - [x] `npm.cmd test -- coaching`: 4 archivos y 104/104 pruebas.
-- [x] `npm.cmd test -- speech-output`: 4 archivos y 36/36 pruebas.
+- [x] `npm.cmd test -- speech-output`: 4 archivos y 37/37 pruebas.
 - [x] `npm.cmd test -- useAudioRecorder AudioRecorderCard`: 3 archivos y 41/41 pruebas.
 - [x] `npm.cmd test -- audio-analysis`: 1 archivo y 6/6 pruebas.
-- [x] `npm.cmd test`: 33 archivos y 360/360 pruebas.
+- [x] `npm.cmd test`: 33 archivos y 361/361 pruebas.
 - [x] `npm.cmd run build`: 70 módulos transformados.
 - [x] `git diff --check`.
 
@@ -35,10 +35,11 @@ La validación funcional anterior ocurrió sobre el incremento 7 en Chrome y Edg
 ### Revalidación obligatoria del hotfix P1
 
 - [x] Regresión automática: voz disponible aunque aparezca después del antiguo límite de 2,1 s y sin un nuevo `voiceschanged`.
+- [x] Regresión automática: snapshot de voz sincronizado si cambia entre el primer render y la suscripción React.
 - [x] Regresión automática: último chunk incluido y Blob creado sólo tras el evento `stop`.
 - [x] Regresión automática: reanálisis usa el mismo Blob; capturas tardías o nuevas permanecen aisladas.
 - [x] Regresión automática: MP4/AAC se prioriza cuando está disponible y WebM permanece como fallback.
-- [ ] Segundo commit correctivo enviado a `main` y deployment de Vercel asociado al nuevo SHA.
+- [ ] Commit de sincronización React enviado a `main` y deployment de Vercel asociado al nuevo SHA.
 - [ ] Chrome: “Escuchar instrucción” se habilita en el primer recorrido sin remontar la vista.
 - [ ] Edge: “Escuchar instrucción” se habilita en el primer recorrido sin remontar la vista.
 - [ ] Chrome: grabación de 3–4 s muestra duración reproducible, análisis válido y reanálisis válido.

@@ -104,6 +104,44 @@ describe('useSpeechOutput', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('sincroniza una voz publicada entre el snapshot inicial y la suscripción', () => {
+    const synthesis = new HookSpeechSynthesis();
+    const output = new BrowserSpeechOutput({
+      synthesis,
+      createUtterance: (text) => new HookUtterance(text),
+      voiceRetryDelaysMs: [],
+    });
+    const originalGetSnapshot = output.getSnapshot.bind(output);
+    let firstRead = true;
+    const getSnapshot = vi
+      .spyOn(output, 'getSnapshot')
+      .mockImplementation(() => {
+        const snapshot = originalGetSnapshot();
+        if (firstRead) {
+          firstRead = false;
+          synthesis.voices = [
+            {
+              name: 'Ecuador',
+              lang: 'es-EC',
+              localService: true,
+              default: true,
+              voiceURI: 'voice:ec',
+            },
+          ];
+          synthesis.dispatchEvent(new Event('voiceschanged'));
+        }
+        return snapshot;
+      });
+
+    const { result, unmount } = renderHook(() => useSpeechOutput({ output }));
+
+    expect(getSnapshot.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(result.current.state.status).toBe('ready');
+    expect(result.current.isAvailable).toBe(true);
+    expect(synthesis.utterances).toHaveLength(0);
+    unmount();
+  });
+
   it('expone ready, speaking y ready al finalizar', async () => {
     const { output, utterances } = setup();
     const { result } = renderHook(() => useSpeechOutput({ output }));

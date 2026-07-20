@@ -684,14 +684,14 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 
 - Fecha: 2026-07-20.
 - Alcance: corrección mínima y autorizada de dos defectos P1 observados en producción. No se iniciaron los incrementos 8–9, no se añadieron características, servicios o dependencias y `package.json`/`package-lock.json` permanecieron intactos.
-- Estado: el primer hotfix (`a64e11a`) fue enviado y desplegado, pero la revalidación de producción reprodujo ambos P1 y aportó evidencia adicional. La segunda corrección local está aprobada automáticamente; todavía se debe enviar su nuevo commit, esperar otro deployment y repetir los recorridos de Chrome y Edge.
+- Estado: el audio corregido en `113754e` fue validado funcionalmente, pero la voz volvió a reproducir el fallo inicial en ese deployment. La corrección final de la carrera React está aprobada automáticamente; todavía se debe enviar su nuevo commit, esperar otro deployment y repetir voz en Chrome y Edge.
 
 ### P1 — voces de SpeechSynthesis en el primer montaje
 
-- Evidencia de producción: después de agotarse los cinco reintentos del primer hotfix, la interfaz seguía en `loading_voices`, mientras una consulta posterior devolvía 22 voces, incluidas `Google español` (`es-ES`) y `Google español de Estados Unidos` (`es-US`). Remontar la vista encontraba esas mismas voces inmediatamente.
-- Causa raíz confirmada: la carga inicial tardía de voces en Chromium superó el límite acumulado de 2,1 segundos y no produjo después un `voiceschanged`, foco o cambio de visibilidad que actualizara el estado. El orden listener/consulta y el cleanup eran correctos, pero el plazo real era insuficiente.
-- Corrección: se conserva sin cambios la selección española y se amplía únicamente la espera acotada a 15,5 segundos: 50, 150 y 300 ms, seguidos de 30 consultas cada 500 ms. Encontrar una voz española cancela el timer restante; desmontar elimina timers/listeners; una lista no vacía sin voz española queda `unavailable`. No existe autoplay, fallback a otro idioma ni cambio de foco.
-- Regresión: además del orden listener/consulta, aparición sin `voiceschanged`, límite, cleanup y foco/visibilidad, una prueba nueva publica la voz después del antiguo límite de 2,1 segundos y confirma estado `ready`, cero locuciones automáticas y cero timers restantes.
+- Evidencia de producción: `113754e` estaba desplegado en producción y Vercel lo mostraba `READY`, sin errores runtime. En el primer recorrido el botón continuaba deshabilitado; después de “Preparar intento” y “Volver a la instrucción” aparecía habilitado. La consulta del navegador seguía mostrando voces españolas disponibles.
+- Causa raíz confirmada: `BrowserSpeechOutput` se conectaba desde su constructor antes de que el efecto de `useSpeechOutput` instalara el suscriptor React. Si Chromium publicaba la voz después de la lectura inicial de `loading_voices` pero antes de esa suscripción, el adaptador cambiaba internamente a `ready` y cancelaba sus reintentos, pero el hook perdía la notificación y conservaba el estado visual anterior. El siguiente cambio del flujo provocaba otro render y exponía la disponibilidad interna, reproduciendo exactamente el patrón observado.
+- Corrección: el efecto construye una única función de sincronización, se suscribe, conecta el adaptador y vuelve a leer inmediatamente `getSnapshot()` ya dentro de la suscripción. Así se cierra la ventana sin modificar `SpeechSynthesis`, la selección española, el foco o la reproducción. Se conserva la espera acotada de 15,5 segundos como recuperación para voces realmente tardías; no existe autoplay ni fallback a otro idioma.
+- Regresión: una prueba publica la voz deliberadamente entre la lectura inicial y la instalación del suscriptor. El hook debe terminar `ready`, habilitar la voz, no crear locuciones y realizar al menos una segunda lectura del snapshot. Las pruebas previas de reintentos, `voiceschanged`, foco/visibilidad y cleanup permanecen aprobadas.
 
 ### P1 — Blob de MediaRecorder no reproducible o decodificable
 
@@ -704,14 +704,14 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 
 - `npm.cmd run lint`: código 0.
 - `npm.cmd run typecheck`: código 0.
-- `npm.cmd test -- speech-output`: 4 archivos y 36/36 pruebas aprobadas.
+- `npm.cmd test -- speech-output`: 4 archivos y 37/37 pruebas aprobadas.
 - `npm.cmd test -- useAudioRecorder AudioRecorderCard`: 3 archivos y 41/41 pruebas aprobadas.
 - `npm.cmd test -- audio-analysis`: 1 archivo y 6/6 pruebas aprobadas.
 - `npm.cmd test -- practice`: 9 archivos y 51/51 pruebas aprobadas.
 - `npm.cmd test -- session`: 2 archivos y 15/15 pruebas aprobadas.
 - `npm.cmd test -- coaching`: 4 archivos y 104/104 pruebas aprobadas.
-- `npm.cmd test`: 33 archivos y 360/360 pruebas aprobadas.
-- `npm.cmd run build`: código 0; Vite 8.1.5 transformó 70 módulos y generó `dist/index.html` (0.58 kB), CSS (22.65 kB) y JavaScript (302.46 kB).
+- `npm.cmd test`: 33 archivos y 361/361 pruebas aprobadas.
+- `npm.cmd run build`: código 0; Vite 8.1.5 transformó 70 módulos y generó `dist/index.html` (0.58 kB), CSS (22.65 kB) y JavaScript (302.48 kB).
 - `git diff --check`: código 0.
 - Validación de producción pendiente: primer montaje de voz, captura reproducible, análisis y reanálisis deben repetirse en Chrome y Edge después del deployment de este commit. Hasta entonces la versión no está apta para grabar el video final.
 
