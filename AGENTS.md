@@ -6,9 +6,15 @@ Rimay es una aplicación web accesible para práctica guiada del habla con datos
 
 Rimay es una herramienta de apoyo para práctica y seguimiento. No diagnostica disartria, no clasifica severidad, no prescribe tratamiento y no sustituye el criterio de un profesional.
 
-Los incrementos 1, 2, 3, 4, 5 y 6 están completados. El último commit confirmado es `f846f38 feat: add exercise catalog and accessible speech output`. El incremento 7 — Sesión de cinco intentos y adaptación completa es el siguiente incremento planificado y todavía no se ha iniciado.
+Los incrementos 1–7 están completados. El último commit confirmado es `c13fe5e feat: add adaptive five-attempt practice session`. El incremento 7 fue validado técnica y funcionalmente en Chrome y Edge y queda congelado como base de la versión candidata de hackathon.
 
-La tarea actual está autorizada exclusivamente para resolver bloqueos documentales previos al incremento 7 en `AGENTS.md`, `docs/hackathon-build/spec.md`, `docs/hackathon-build/checklist.md` y `docs/hackathon-build/build-notes.md`. El código del incremento 7 sólo puede modificarse después de una autorización explícita posterior. Durante esta pausa no escribas código de aplicación, no agregues dependencias, no configures servicios y no hagas commit.
+Los incrementos 8 y 9 quedan diferidos como trabajo futuro. La versión presentada no incluye persistencia local, roles, panel o resumen profesional, sincronización, backend ni validación clínica; esas ausencias forman parte del corte decidido y no son defectos de la entrega.
+
+La fase actual autoriza exclusivamente la preparación documental de la versión candidata sobre el incremento 7 congelado. Puede crear o actualizar `README.md`, `docs/hackathon-build/submission.md`, `docs/hackathon-build/demo-script.md`, `docs/hackathon-build/release-checklist.md`, `AGENTS.md`, `docs/hackathon-build/spec.md`, `docs/hackathon-build/checklist.md` y `docs/hackathon-build/build-notes.md`. También autoriza una ejecución fresca de lint, typecheck, pruebas y build, y un único commit local compuesto sólo por esos documentos y materiales de release.
+
+Durante esta fase no escribas código de aplicación, no agregues dependencias, no implementes persistencia, roles, panel o resumen profesional, backend, Supabase u OpenAI API, y no inicies los incrementos 8–9. Tampoco hagas push, despliegue automático, configuración de remotos ni llamadas a `/feedback`.
+
+La versión candidata congelada incluye captura temporal de audio, análisis acústico local, reconocimiento browser opcional, fallback manual, demo determinista, métricas textuales locales, coaching determinista, catálogo de tres ejercicios, voz accesible, sesión adaptativa de cinco intentos y finalización técnica.
 
 ## Arquitectura esperada
 
@@ -19,9 +25,9 @@ La tarea actual está autorizada exclusivamente para resolver bloqueos documenta
 - Demostración: `DemoSpeechRecognizer` determinista, sin red y claramente identificado como texto predefinido que no analizó el audio.
 - Alternativa manual: el usuario puede omitir o abandonar el reconocimiento automático y escribir lo que intentó pronunciar; la interfaz identifica el origen manual y nunca lo presenta como transcripción automática.
 - Procesamiento textual: normalización, tokenización, similitud, coincidencias, omisiones, adiciones y palabras por minuto se calculan localmente mediante reglas versionadas y pruebas deterministas.
-- Retroalimentación, adaptación y resumen: motor local determinista con reglas versionadas, plantillas curadas, razones visibles y selección limitada al catálogo permitido.
+- Retroalimentación y adaptación entregadas: motor local determinista con reglas versionadas, plantillas curadas, razones visibles y selección limitada al catálogo permitido. El resumen profesional queda como trabajo futuro.
 - Voz de salida: `SpeechSynthesis` con voz española cuando esté disponible y texto visible equivalente.
-- Persistencia del MVP: una clave versionada de `localStorage` conserva sólo sesiones ficticias y datos derivados; incluye una acción para eliminar todos los datos locales de Rimay. El audio nunca se persiste.
+- Persistencia posterior: una futura ampliación puede usar una clave versionada de `localStorage` para sesiones ficticias y datos derivados, con eliminación total de las claves de Rimay. La versión candidata congelada no usa almacenamiento web y el audio nunca se persiste.
 - Despliegue: SPA estática en Vercel Hobby, dentro de sus límites gratuitos, sin Functions, add-ons, dominios comprados ni servicios conectados que puedan generar cargos.
 - Sin backend inicial: no se implementan Supabase, Edge Functions, OpenAI API, APIs comerciales ni integraciones que requieran facturación, prueba temporal o tarjeta de crédito.
 - Herramientas de construcción: Codex y GPT-5.6 pueden usarse durante diseño, implementación, revisión, pruebas y documentación; no son dependencias ni servicios runtime de Rimay.

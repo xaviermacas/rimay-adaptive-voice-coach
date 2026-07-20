@@ -2,9 +2,9 @@
 
 ## 1. Estado y alcance de esta especificación
 
-Esta especificación define la arquitectura objetivo del MVP. Los incrementos 1, 2, 3, 4, 5 y 6 están completados; el último commit confirmado es `f846f38 feat: add exercise catalog and accessible speech output`. El incremento 7 — Sesión de cinco intentos y adaptación completa es el siguiente incremento planificado y todavía no se ha iniciado.
+Esta especificación conserva la arquitectura objetivo histórica y fija además el corte de la versión candidata de hackathon. Los incrementos 1–7 están completados; el último commit confirmado es `c13fe5e feat: add adaptive five-attempt practice session`. El incremento 7 fue validado técnica y funcionalmente en Chrome y Edge.
 
-La revisión actual es exclusivamente documental y resuelve los contratos de integración previos al incremento 7. No autoriza código, dependencias, servicios, commit ni el inicio del incremento 7; su implementación requiere una autorización explícita posterior.
+La revisión actual es exclusivamente documental y congela la versión candidata sobre el incremento 7. Autoriza sólo los ocho documentos enumerados en `AGENTS.md`, una ejecución fresca de la matriz técnica y un único commit local compuesto por esos materiales. No autoriza código, dependencias, servicios, otros archivos de entrega, push ni despliegue. Los incrementos 8 y 9 quedan diferidos como trabajo futuro y no forman parte de la versión presentada.
 
 Palabras normativas:
 
@@ -27,12 +27,29 @@ Palabras normativas:
 10. **Límite médico explícito:** toda salida es descriptiva, no clínica y limitada a datos ficticios.
 11. **Dependencias mínimas:** cada librería debe resolver una necesidad verificable, fijar versión y no introducir consumo remoto cobrable.
 
+### 2.1 Corte de la versión candidata de hackathon
+
+La versión candidata congelada incluye:
+
+- captura temporal de audio con `MediaRecorder`;
+- análisis acústico local `audio-metrics-v1`;
+- reconocimiento browser opcional y fallback manual;
+- demo determinista sin micrófono, audio del usuario o red;
+- métricas textuales locales `text-metrics-v1`;
+- coaching y adaptación deterministas con `coach-rules-v1` y `coach-templates-v1`;
+- catálogo local de tres ejercicios;
+- voz accesible mediante `SpeechSynthesis` y texto visible equivalente;
+- sesión adaptativa de cinco intentos válidos aceptados;
+- finalización técnica y nueva sesión en memoria.
+
+Quedan como trabajo futuro, sin presentarse como defectos de esta entrega: persistencia local, roles, panel y resumen profesional, sincronización, backend y validación clínica. Las secciones posteriores que describen `LocalSessionRepository`, `summary-rules-v1`, vista profesional o contratos persistidos documentan ese objetivo futuro y no el runtime entregado.
+
 ## 3. Vista de arquitectura
 
 ```text
 Vercel Hobby — archivos estáticos únicamente
 └─ React + Vite + TypeScript
-   ├─ UI paciente / profesional
+   ├─ UI de práctica técnica
    ├─ MediaRecorder ──────────────── Blob temporal sólo en memoria
    ├─ Web Audio ──────────────────── audio-metrics-v1
    ├─ SpeechRecognizer
@@ -42,16 +59,18 @@ Vercel Hobby — archivos estáticos únicamente
    ├─ text-metrics-v1 ─────────────── normalización, tokens y comparación local
    ├─ coach-rules-v1 ──────────────── plantillas, razones y adaptación local
    ├─ SpeechSynthesis ──────────────── salida opcional con texto equivalente
-   └─ LocalSessionRepository ───────── localStorage; sin audio; borrado total
+   └─ Sesión efímera de cinco intentos ─ memoria; sin persistencia ni audio histórico
 ```
 
-No existen en el MVP:
+No existen en la versión candidata:
 
 - Supabase, Edge Functions, Database, Storage, Auth, RLS o migraciones;
 - OpenAI API, `gpt-4o-transcribe`, GPT-5.6 API o Responses API;
 - APIs comerciales de transcripción o modelos hospedados contratados;
 - Vercel Functions, add-ons, almacenamiento, dominios comprados o planes pagos;
 - secretos o variables runtime necesarias para que la aplicación funcione.
+
+`LocalSessionRepository`, roles y revisión profesional permanecen documentados sólo como trabajo futuro y no se incluyen en el despliegue de la versión candidata.
 
 Codex y GPT-5.6 son herramientas de construcción usadas fuera de la aplicación durante diseño, implementación, revisión, pruebas y documentación. No aparecen en el diagrama runtime.
 
@@ -777,7 +796,7 @@ Los umbrales son reglas de interacción del demo y no están clínicamente valid
 
 ### 10.6 Resumen profesional
 
-`summary-rules-v1` ordena plantillas por ID de intento y evidencia disponible. El resumen:
+`summary-rules-v1` queda diferido y no forma parte de la versión candidata. Su diseño futuro ordena plantillas por ID de intento y evidencia disponible. El resumen:
 
 - declara que la sesión y los datos son ficticios;
 - enumera procedencia del texto y banderas de calidad presentes;
@@ -1211,9 +1230,9 @@ El incremento 7 permanece como un único incremento formal con cinco tramos:
 
 No se crean commits parciales salvo autorización posterior. Completar un tramo no autoriza el siguiente incremento ni persistencia, roles, resumen profesional o panel profesional.
 
-## 11. Persistencia local y eliminación
+## 11. Persistencia local y eliminación — trabajo futuro
 
-`LocalSessionRepository` usa una única clave versionada: `rimay.demo.v1`.
+La versión candidata no usa almacenamiento web. Una ampliación posterior con `LocalSessionRepository` usaría una única clave versionada: `rimay.demo.v1`.
 
 ```ts
 interface PersistedRimayData {
@@ -1276,7 +1295,7 @@ Rimay no puede eliminar datos que un servicio propio del navegador hubiera proce
 
 ## 13. Configuración
 
-El MVP no necesita variables de entorno runtime. Las opciones se resuelven mediante configuración local versionada y segura:
+La versión candidata no necesita variables de entorno runtime. Las opciones entregadas se resuelven mediante configuración local versionada y segura; las opciones de resumen y almacenamiento de la lista siguiente corresponden sólo al objetivo futuro:
 
 ```text
 recognitionLanguageTag=es-EC
@@ -1437,7 +1456,8 @@ La documentación, README y Devpost deben distinguir:
 - **Construcción:** Codex y asistencia de GPT-5.6 para diseño, implementación, revisión, pruebas y documentación.
 - **Runtime:** Web APIs del navegador, algoritmos locales y reglas deterministas versionadas.
 - **Transcripción:** capacidad opcional `SpeechRecognition` del navegador, fixture demo o entrada manual; nunca OpenAI.
-- **Feedback y resumen:** `coach-rules-v1` y `summary-rules-v1`; nunca GPT-5.6 en runtime.
+- **Feedback entregado:** `coach-rules-v1`; nunca GPT-5.6 en runtime.
+- **Resumen futuro:** `summary-rules-v1`, diferido junto con la revisión profesional y nunca atribuido a GPT-5.6 en runtime.
 
 ## 20. Referencias técnicas
 

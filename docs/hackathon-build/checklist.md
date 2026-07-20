@@ -747,7 +747,27 @@ La validación manual en Chrome y Edge recorre cinco válidos consecutivos, sile
 
 **Cierre:** el responsable confirmó la validación manual técnica y funcional final en Chrome y Edge. El incremento 7 queda completado con dictamen `APTO PARA CERRAR`, sin defectos materiales conocidos. `SpeechRecognition` no produjo un resultado utilizable durante la prueba y el fallback manual funcionó correctamente. No se inicia el incremento 8.
 
+## Congelación de la versión candidata de hackathon
+
+**Estado: ACTIVA — 2026-07-20**
+
+La versión candidata queda congelada sobre `c13fe5e feat: add adaptive five-attempt practice session`. Incluye captura temporal, análisis acústico y textual local, reconocimiento browser opcional, entrada manual, demo determinista, coaching versionado, tres ejercicios, voz accesible, sesión adaptativa de cinco intentos y finalización técnica.
+
+No se amplía funcionalidad durante la preparación de entrega. Sólo se buscan defectos P0/P1 que impidan iniciar, construir o completar la demo, provoquen un error no recuperable o una fuga material de recursos, oculten el control principal, introduzcan contenido clínicamente inseguro, agreguen red no declarada o impidan el despliegue estático.
+
+Persistencia local, roles, panel y resumen profesional, sincronización, backend y validación clínica quedan diferidos como trabajo futuro. No se consideran defectos de la versión presentada. Los incrementos 8–11 siguientes conservan el historial del plan original, pero no están autorizados ni forman parte de esta versión candidata.
+
+### Preparación documental de entrega — 2026-07-20
+
+La autorización posterior amplió esta fase únicamente a `README.md`, `submission.md`, `demo-script.md`, `release-checklist.md` y los cuatro documentos normativos ya modificados. Se crearon los cuatro materiales de entrega con límites, privacidad, accesibilidad, arquitectura, uso de Codex y placeholders explícitos para enlaces y `/feedback`.
+
+La matriz fresca terminó con lint y typecheck en código 0; sesión 2 archivos y 15/15 pruebas; práctica 9 archivos y 51/51; coaching 4 archivos y 104/104; suite completa 32 archivos y 339/339; y build Vite con 70 módulos transformados. La auditoría de materiales no encontró rutas locales, correos, secretos, enlaces Markdown locales, TODOs bloqueantes o funciones de los incrementos 8–9 presentadas como existentes.
+
+La evidencia manual permanece sin cambios: demo y entrada manual fueron validadas en Chrome y Edge; `SpeechRecognition` no produjo un resultado utilizable; no se informó validación manual con lector de pantalla ni revisión clínica o profesional externa. GitHub, Vercel, video, capturas, Devpost y `/feedback` siguen pendientes.
+
 ## Incremento 8 — Persistencia local, roles y eliminación total
+
+**Estado: DIFERIDO — trabajo futuro fuera de la versión candidata**
 
 **Objetivo**
 
@@ -786,6 +806,8 @@ Inspeccionar `localStorage`, recargar, cambiar de rol, descartar una sesión y e
 
 ## Incremento 9 — Revisión y resumen profesional determinista
 
+**Estado: DIFERIDO — trabajo futuro fuera de la versión candidata**
+
 **Objetivo**
 
 Completar la vista profesional con intentos, procedencia, métricas, decisiones, evidencia y `summary-rules-v1`.
@@ -820,6 +842,8 @@ Recorrer una sesión completa, cambiar a profesional y revisar estados vacío y 
 
 ## Incremento 10 — Accesibilidad, errores, privacidad y auditoría de costo
 
+**Estado: DIFERIDO — trabajo futuro fuera de la versión candidata**
+
 **Objetivo**
 
 Falsificar los flujos, completar el endurecimiento WCAG 2.2 AA y demostrar ausencia de servicios cobrables.
@@ -853,6 +877,8 @@ npm run build
 Completar matriz manual de Chrome/Edge, teclado, lector de pantalla, zoom, micrófono, Web Speech, red, Storage y eliminación local.
 
 ## Incremento 11 — Documentación final, Vercel Hobby y ensayo
+
+**Estado: DIFERIDO — plan histórico fuera de la congelación actual**
 
 **Objetivo**
 
@@ -891,4 +917,4 @@ Ejecutar el build local y desplegado, el guion, la matriz de errores, eliminaci�
 
 ## Condición de cierre global
 
-La construcción termina cuando el incremento 11 cumple su aceptación y el responsable aprueba la demostración. Cualquier uso con personas o datos reales, persistencia remota, autenticación, audio histórico, servicio cobrable o afirmación clínica requiere un proyecto posterior con alcance, seguridad, presupuesto y revisión profesional propios.
+La versión candidata de hackathon se congela después del incremento 7. Los incrementos 8–11 requieren una autorización posterior y no son condición de aceptación de la versión presentada. Cualquier uso con personas o datos reales, persistencia remota, autenticación, audio histórico, servicio cobrable o afirmación clínica requiere un proyecto posterior con alcance, seguridad, presupuesto y revisión profesional propios.

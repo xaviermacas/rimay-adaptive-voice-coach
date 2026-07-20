@@ -650,11 +650,41 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 
 **Cierre:** el incremento 7 queda completado con dictamen `APTO PARA CERRAR`. La validación fue técnica y funcional, no clínica; el reconocimiento browser no produjo un resultado utilizable y el fallback manual permitió completar el flujo. No se inició el incremento 8.
 
+## Congelación documental posterior al incremento 7
+
+- Fecha: 2026-07-20.
+- Estado base observado: rama `main`, árbol limpio y `HEAD` `c13fe5e69645a76b4d9babe331e3a8c6cdf87030` (`feat: add adaptive five-attempt practice session`).
+- Alcance autorizado: exclusivamente `AGENTS.md`, `spec.md`, `checklist.md` y `build-notes.md`; no se modificaron código, pruebas, configuración, README, otros materiales de entrega, dependencias, lockfile o servicios y no se creó commit.
+- Congelación: el incremento 7 cerrado es la base de la versión candidata. No se implementan los incrementos 8–9 ni se amplía funcionalidad.
+- Capacidades incluidas: captura temporal, análisis acústico local, reconocimiento browser opcional, entrada manual, demo determinista, métricas textuales locales, coaching determinista, catálogo de tres ejercicios, voz accesible, cinco intentos adaptativos y finalización técnica.
+- Trabajo futuro: persistencia local, roles, panel y resumen profesional, sincronización, backend y validación clínica. Estas capacidades diferidas no se registran como defectos de la versión candidata.
+- Auditoría estática P0/P1: no se encontraron solicitudes propias de red, almacenamiento web, OpenAI, Supabase, telemetría, logs de producción, backend, Functions, rutas secundarias o secretos en el runtime. La UI conserva propósito técnico, aviso no clínico, privacidad del audio, distinción demo/medición real, entrada manual declarada, controles nativos y finalización técnica.
+- Vercel: `package.json` usa `npm run build`, Vite conserva la salida predeterminada `dist`, no existen rutas de cliente ni archivos de backend y no se requiere `vercel.json`. La documentación vigente de Vite y Vercel indica detección automática del framework y de la salida. Hobby debe confirmarse en el panel como uso personal o no comercial, sin prueba Pro, tarjeta, Functions, add-ons, Storage, analytics pagos o dominio comprado.
+- Variables: la aplicación no consulta `process.env` ni `import.meta.env`. `.env.example` conserva una variable histórica no consumida; no es requisito de build o runtime y no se configura en Vercel.
+- Verificación de esta pausa: presencia y lectura completa de los documentos normativos, configuración y flujo principal; búsquedas negativas de red, almacenamiento, servicios, secretos, rutas locales y backend; revisión del diff y `git diff --check`. Los comandos de producto se sustituyen por comprobaciones documentales porque `AGENTS.md` mantiene esta fase como exclusivamente documental.
+- Límite de la pausa: README, `submission.md`, `demo-script.md`, `release-checklist.md`, pruebas/build frescos, despliegue, remoto, push y commit quedan pendientes de una autorización que amplíe expresamente los archivos y acciones permitidos.
+
+## Preparación documental autorizada de la versión candidata
+
+- Fecha: 2026-07-20.
+- Autorización posterior: se amplió el alcance únicamente a `README.md`, `docs/hackathon-build/submission.md`, `docs/hackathon-build/demo-script.md`, `docs/hackathon-build/release-checklist.md` y los cuatro documentos normativos ya modificados. Se autorizaron verificaciones frescas y un commit local exclusivamente documental; push, remotos, despliegue y `/feedback` permanecen prohibidos en esta fase.
+- Materiales creados: README narrativo, borrador de Devpost, guion hablado y checklist operativo. El guion contiene 336 palabras de narración, aproximadamente 2.3 minutos a 145 palabras por minuto más las acciones en pantalla, dentro del objetivo total de 2:30–3:00.
+- Auditoría editorial y estática: no se encontraron rutas absolutas locales de Windows o macOS, correos, secretos de alta confianza, enlaces Markdown locales, marcadores bloqueantes de trabajo pendiente, afirmaciones positivas de Supabase/OpenAI como runtime o documentación que presente los incrementos 8–9 como iniciados. Las menciones clínicas de los materiales son límites explícitos, no afirmaciones diagnósticas o terapéuticas.
+- Coherencia: persistencia, roles, panel y resumen profesional se describen sólo como trabajo futuro. El reconocimiento browser permanece como mejora progresiva sin resultado utilizable observado; demo y entrada manual conservan la validación manual de Chrome y Edge. Continúan pendientes lector de pantalla, revisión clínica o profesional externa, GitHub, Vercel, video, capturas, Devpost y `/feedback`.
+- `npm.cmd run lint`: código 0, sin errores ni advertencias reportados.
+- `npm.cmd run typecheck`: código 0.
+- `npm.cmd test -- session`: 2 archivos y 15/15 pruebas aprobadas.
+- `npm.cmd test -- practice`: 9 archivos y 51/51 pruebas aprobadas.
+- `npm.cmd test -- coaching`: 4 archivos y 104/104 pruebas aprobadas.
+- `npm.cmd test`: 32 archivos y 339/339 pruebas aprobadas.
+- `npm.cmd run build`: código 0; Vite 8.1.5 transformó 70 módulos y generó `dist/index.html` (0.58 kB), CSS (22.65 kB) y JavaScript (299.85 kB).
+- Dependencias y código: `src/`, `package.json` y `package-lock.json` permanecen intactos. No se añadieron persistencia, roles, panel profesional, backend, Supabase, OpenAI API, servicios o dependencias.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |
 | --- | --- | --- |
-| D-001 | El MVP usa un selector local paciente/profesional sin login. | La revisión ocurre en el mismo navegador y no representa un modelo de acceso clínico. |
+| D-001 | Los roles quedan fuera de la versión candidata congelada. | El selector paciente/profesional permanece como trabajo futuro y no representa un defecto de la entrega técnica. |
 | D-002 | El audio es estrictamente temporal. | El `Blob` puede reproducirse y analizarse localmente, pero Rimay no lo envía ni lo guarda. La vista profesional no tiene audio histórico. |
 | D-003 | La voz de salida usa `SpeechSynthesis`. | Evita claves, costo y latencia. Siempre hay texto visible; un control contextual permite escuchar o detener y volver a escuchar mediante una nueva acción explícita. |
 | D-004 | El modo demo usa `DemoSpeechRecognizer`. | Completa el recorrido sin red ni secretos mediante fixtures deterministas y declara que no analizó el audio. |
@@ -662,9 +692,9 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 | D-006 | Rimay no envía el `Blob`. | `BrowserSpeechRecognizer` escucha mediante la API del navegador en paralelo; no recibe el archivo de `MediaRecorder`. |
 | D-007 | Se informa la frontera de privacidad del navegador. | Algunos navegadores pueden usar un servicio remoto propio; Rimay no promete reconocimiento local u offline. |
 | D-008 | Las métricas de audio y texto se calculan localmente. | `audio-metrics-v1` y `text-metrics-v1` son deterministas, versionados y no clínicos. |
-| D-009 | Retroalimentación, adaptación y resumen son deterministas. | Reglas y plantillas locales reemplazan GPT; toda acción incluye versión, razón y evidencia. |
+| D-009 | Retroalimentación y adaptación son deterministas; el resumen queda diferido. | `coach-rules-v1` y plantillas locales reemplazan GPT en la versión entregada; `summary-rules-v1` permanece como trabajo futuro. |
 | D-010 | La sesión tiene cinco intentos válidos. | Los tres primeros cubren palabra, frase y lectura guiada; los restantes permiten adaptación acotada. |
-| D-011 | Persistencia sólo en `localStorage`. | `rimay.demo.v1` guarda sesiones ficticias y datos derivados; existe eliminación total y nunca se persiste audio. |
+| D-011 | La versión candidata no persiste sesiones. | Todo el historial del incremento 7 vive en memoria; una posible persistencia `rimay.demo.v1` y su eliminación total quedan como trabajo futuro. |
 | D-012 | El MVP no usa Supabase ni backend. | No hay Edge Functions, Database, Storage, Auth, RLS, migraciones o secretos. |
 | D-013 | El MVP no usa APIs de OpenAI en runtime. | OpenAI API, `gpt-4o-transcribe`, GPT-5.6 API y Responses API quedan excluidos. |
 | D-014 | El frontend estático se despliega en Vercel Hobby. | Se usa el subdominio gratuito, sin Functions, add-ons, prueba Pro, dominio comprado ni tarjeta. |
@@ -701,6 +731,9 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 | D-045 | El progreso visible describe sólo flujo técnico. | Se muestran válidos de cinco y tipos cubiertos; no se presenta puntuación o evolución clínica. |
 | D-046 | El incremento 7 permanece completamente en memoria. | No usa almacenamiento web, contratos persistidos, repositorios, backend, Supabase u OpenAI y nunca conserva audio. |
 | D-047 | Los contratos preliminares `Attempt` y `Session` no rigen el incremento 7. | Demo no tiene grabación real y un válido puede carecer de texto; la forma persistida se resolverá en el incremento 8. |
+| D-048 | La versión candidata se congela sobre el incremento 7. | Sólo se admiten correcciones P0/P1 mínimas y autorizadas; no se amplía funcionalidad. |
+| D-049 | Los incrementos 8–9 quedan diferidos. | Persistencia, roles, panel y resumen profesional son trabajo futuro y no defectos de la entrega. |
+| D-050 | La preparación documental final fue autorizada en una fase posterior. | Permite README, materiales Devpost, guion, checklist, matriz fresca y un commit local exclusivamente documental; no autoriza push, remoto, despliegue o `/feedback`. |
 
 Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan sustituidas por D-004 a D-018 desde esta pausa documental.
 
@@ -712,11 +745,11 @@ Las decisiones anteriores que proponían un modo `live`, GPT o Supabase quedan s
 - Texto: `text-metrics-v1` conserva original, normalizado NFC y comparación sin tildes ni diéresis pero con `ñ` distinta de `n`; usa alineamiento dinámico por palabras con operaciones y desempate estables.
 - Reconocimiento browser: tag inicial `es-EC`, resultados provisionales y finales, error mapping y alternativa manual.
 - Reconocimiento demo: fixtures por IDs conocidos, sin `fetch` y sin acceso al audio.
-- Coaching: `coach-rules-v1` devuelve `CoachResult`, usa contador y cobertura anteriores al intento actual y selecciona desde `allowedExercises` con orden total; resumen: `summary-rules-v1`.
+- Coaching entregado: `coach-rules-v1` devuelve `CoachResult`, usa contador y cobertura anteriores al intento actual y selecciona desde `allowedExercises` con orden total; `summary-rules-v1` queda diferido.
 - Catálogo: tres ejercicios readonly en orden palabra/frase/lectura, con dificultades 1–2–3 y secuencia explícita; no existe matriz obligatoria de nueve entradas.
 - Pausas editoriales: offsets UTF-16 posteriores a puntuación sobre `targetText` NFC; no representan duración clínica.
 - Voz: `SpeechOutput` mínimo, `es-EC` preferido, selección `es-*` determinista, parámetros `1/1/1`, una locución activa, `voiceschanged`, cancelación y fallback textual.
-- Persistencia: clave `rimay.demo.v1`, máximo 20 sesiones ficticias y lista explícita de claves para eliminación total.
+- Persistencia futura: una ampliación posterior puede usar `rimay.demo.v1`, máximo 20 sesiones ficticias y lista explícita de claves para eliminación total; la versión candidata no usa almacenamiento web.
 - Despliegue: build estático Vite en Vercel Hobby; no se prevén variables de entorno runtime.
 
 ## Elementos pagados eliminados
