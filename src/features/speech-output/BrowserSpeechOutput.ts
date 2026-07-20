@@ -21,7 +21,12 @@ type AvailabilityListener = (
   snapshot: SpeechOutputAvailabilitySnapshot,
 ) => void;
 
-const DEFAULT_VOICE_RETRY_DELAYS_MS = [50, 150, 300, 600, 1_000] as const;
+const DEFAULT_VOICE_RETRY_DELAYS_MS = [
+  50,
+  150,
+  300,
+  ...Array.from({ length: 30 }, () => 500),
+] as const;
 
 function defaultSynthesis(): SpeechSynthesis | null {
   return typeof window === 'undefined' || !('speechSynthesis' in window)

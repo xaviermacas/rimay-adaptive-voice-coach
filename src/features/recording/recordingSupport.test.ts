@@ -7,14 +7,31 @@ import {
 } from './recordingSupport';
 
 describe('selectSupportedMimeType', () => {
-  it('elige el primer formato compatible en el orden documentado', () => {
+  it('prioriza MP4 con AAC cuando el navegador objetivo lo admite', () => {
+    const isTypeSupported = vi.fn(() => true);
+
+    expect(selectSupportedMimeType({ isTypeSupported })).toBe(
+      'audio/mp4;codecs=mp4a.40.2',
+    );
+    expect(isTypeSupported).toHaveBeenCalledOnce();
+    expect(isTypeSupported).toHaveBeenCalledWith(
+      'audio/mp4;codecs=mp4a.40.2',
+    );
+  });
+
+  it('conserva WebM como fallback cuando MP4 no está disponible', () => {
     const isTypeSupported = vi.fn(
       (mimeType: string) => mimeType === 'audio/webm',
     );
 
     expect(selectSupportedMimeType({ isTypeSupported })).toBe('audio/webm');
-    expect(isTypeSupported).toHaveBeenNthCalledWith(1, 'audio/webm;codecs=opus');
-    expect(isTypeSupported).toHaveBeenNthCalledWith(2, 'audio/webm');
+    expect(isTypeSupported.mock.calls.map(([mimeType]) => mimeType)).toEqual([
+      'audio/mp4;codecs=mp4a.40.2',
+      'audio/mp4;codecs=opus',
+      'audio/mp4',
+      'audio/webm;codecs=opus',
+      'audio/webm',
+    ]);
   });
 
   it('permite usar el formato predeterminado cuando ningún candidato coincide', () => {

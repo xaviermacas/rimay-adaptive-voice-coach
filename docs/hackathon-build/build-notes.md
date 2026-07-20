@@ -684,31 +684,34 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 
 - Fecha: 2026-07-20.
 - Alcance: corrección mínima y autorizada de dos defectos P1 observados en producción. No se iniciaron los incrementos 8–9, no se añadieron características, servicios o dependencias y `package.json`/`package-lock.json` permanecieron intactos.
-- Estado: la verificación automática local está aprobada. La versión publicada todavía no se considera revalidada; se debe enviar este commit, esperar un deployment nuevo y repetir los recorridos de Chrome y Edge.
+- Estado: el primer hotfix (`a64e11a`) fue enviado y desplegado, pero la revalidación de producción reprodujo ambos P1 y aportó evidencia adicional. La segunda corrección local está aprobada automáticamente; todavía se debe enviar su nuevo commit, esperar otro deployment y repetir los recorridos de Chrome y Edge.
 
 ### P1 — voces de SpeechSynthesis en el primer montaje
 
-- Causa raíz confirmada: `BrowserSpeechOutput` registraba `voiceschanged` antes de su consulta inmediata, pero, si `getVoices()` devolvía una lista vacía, dependía exclusivamente de otro `voiceschanged`. Si el evento ya había ocurrido o el navegador publicaba voces sin emitirlo nuevamente, el estado permanecía en `loading_voices` hasta remontar el controlador.
-- Corrección: se conserva la política de selección española existente y se añadieron cinco reintentos acotados (50, 150, 300, 600 y 1 000 ms), consulta al recuperar foco o visibilidad sólo mientras no exista una voz seleccionada y cleanup completo de timer/listeners al disponer el controlador. Encontrar una voz española detiene el ciclo; una lista no vacía sin voz española queda `unavailable`, sin fallback silencioso. No existe autoplay ni cambio de foco.
-- Regresión: se prueba el orden listener/consulta, aparición sin `voiceschanged`, límite de reintentos, cleanup, recuperación por foco/visibilidad, ausencia de locución automática y habilitación del hook en el primer montaje.
+- Evidencia de producción: después de agotarse los cinco reintentos del primer hotfix, la interfaz seguía en `loading_voices`, mientras una consulta posterior devolvía 22 voces, incluidas `Google español` (`es-ES`) y `Google español de Estados Unidos` (`es-US`). Remontar la vista encontraba esas mismas voces inmediatamente.
+- Causa raíz confirmada: la carga inicial tardía de voces en Chromium superó el límite acumulado de 2,1 segundos y no produjo después un `voiceschanged`, foco o cambio de visibilidad que actualizara el estado. El orden listener/consulta y el cleanup eran correctos, pero el plazo real era insuficiente.
+- Corrección: se conserva sin cambios la selección española y se amplía únicamente la espera acotada a 15,5 segundos: 50, 150 y 300 ms, seguidos de 30 consultas cada 500 ms. Encontrar una voz española cancela el timer restante; desmontar elimina timers/listeners; una lista no vacía sin voz española queda `unavailable`. No existe autoplay, fallback a otro idioma ni cambio de foco.
+- Regresión: además del orden listener/consulta, aparición sin `voiceschanged`, límite, cleanup y foco/visibilidad, una prueba nueva publica la voz después del antiguo límite de 2,1 segundos y confirma estado `ready`, cero locuciones automáticas y cero timers restantes.
 
 ### P1 — Blob de MediaRecorder no reproducible o decodificable
 
-- Diagnóstico previo: el recorrido anterior sólo publicaba un resultado si el `Blob` tenía `size > 0`; por ello el caso observado en producción no correspondía a `size === 0`, chunks totalmente ausentes o un MIME final vacío. La construcción ya ocurría desde `onstop` y priorizaba `mediaRecorder.mimeType`. Como la versión publicada no conservaba tamaño, MIME ni trazas binarias, no es posible reconstruir forénsicamente los bytes exactos de esa captura después del hecho.
-- Causa raíz confirmada en la implementación: el protocolo de finalización no tenía un latch de stop ni estado aislado por captura. Chunks, tamaño y error terminal vivían en refs compartidas, y `reset`/desmontaje retiraban handlers, vaciaban chunks y detenían tracks inmediatamente, antes del `stop` real. Una captura anterior podía además escribir en los refs de una nueva. El stop normal tampoco solicitaba un flush compatible antes de detener. Esas carreras permitían perder el chunk final o contaminar el ensamblado, produciendo un contenedor positivo en bytes pero técnicamente incompleto.
-- Corrección: cada captura posee una sesión cerrada con recorder, stream, chunks, tamaño, MIME negociado, ID y latch de stop. Los handlers se instalan antes de `start()`, se ignoran chunks vacíos, `requestData()` se intenta con guardas antes de un único `stop()`, el `Blob` sólo se construye después del evento `stop`, y el MIME usa primero `mediaRecorder.mimeType` y luego el negociado. Tracks, chunks y handlers se liberan después de finalizar; resultados obsoletos se descartan sin afectar una sesión nueva. `RecordedAudio` conserva internamente `sizeBytes` y el MIME real. La URL se revoca sólo al descartar, reemplazar o desmontar.
-- Regresión: 14 pruebas dedicadas cubren el último `dataavailable` posterior a la solicitud de stop, creación posterior al chunk final, chunks vacíos, orden completo, MIME real y fallback, doble stop, cleanup diferido, resultados tardíos tras reset/desmontaje, aislamiento entre capturas, Strict Mode, error `audio_empty`, ciclo de URL y tamaño real. La prueba de interfaz confirma además que reanalizar reutiliza exactamente el mismo `Blob`.
+- Evidencia de producción sobre `a64e11a`: el `Blob` tenía 37 315 bytes, MIME `audio/webm`, `readyState === 4`, `mediaError === null` y una pista de audio visible, pero `duration === Infinity`; el reproductor mostraba `0:00` y Web Audio rechazaba `decodeAudioData`. El bundle servido (`index-CjWZIr1i.js`) correspondía al primer hotfix, por lo que no era un deployment obsoleto.
+- Causa raíz confirmada: la carrera de finalización corregida por `a64e11a` era un riesgo real, pero no explicaba esta reproducción. Chromium documenta que su WebM en vivo puede carecer de duración y cues por diseño; ese contenedor puede quedar cargado por el elemento `<audio>` y aun no ser aceptado como archivo completo por `decodeAudioData`. La duración infinita es la señal decisiva. Fuentes: [implementación de MediaRecorder en Chromium](https://chromium.googlesource.com/chromium/src/third_party/+/refs/heads/main/blink/renderer/modules/mediarecorder/README.md) y [contrato de `decodeAudioData`](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/decodeAudioData).
+- Corrección: se conservan las garantías de finalización de `a64e11a` y se cambia sólo la negociación del contenedor. En Chrome/Edge se priorizan `audio/mp4;codecs=mp4a.40.2`, `audio/mp4;codecs=opus` y `audio/mp4`; WebM queda como fallback cuando MP4 no está disponible. El navegador objetivo confirmó `isTypeSupported(...) === true` para los tres candidatos MP4. El MIME final continúa tomando primero `mediaRecorder.mimeType`, sin declarar un formato distinto de los bytes reales.
+- Regresión: las 14 pruebas de ciclo de vida siguen aprobadas; una prueba nueva exige MP4/AAC cuando está disponible y otra recorre todos los candidatos MP4 antes de aceptar WebM. La interfaz comprueba que el MIME negociado llega al constructor y al estado visible. La reproducción, duración finita, análisis y reanálisis reales continúan pendientes de validación en Chrome y Edge tras desplegar esta corrección.
 
 ### Matriz automática del hotfix
 
 - `npm.cmd run lint`: código 0.
 - `npm.cmd run typecheck`: código 0.
-- `npm.cmd test -- speech-output`: 4 archivos y 35/35 pruebas aprobadas.
+- `npm.cmd test -- speech-output`: 4 archivos y 36/36 pruebas aprobadas.
 - `npm.cmd test -- useAudioRecorder AudioRecorderCard`: 3 archivos y 41/41 pruebas aprobadas.
 - `npm.cmd test -- audio-analysis`: 1 archivo y 6/6 pruebas aprobadas.
 - `npm.cmd test -- practice`: 9 archivos y 51/51 pruebas aprobadas.
-- `npm.cmd test`: 33 archivos y 358/358 pruebas aprobadas.
-- `npm.cmd run build`: código 0; Vite 8.1.5 transformó 70 módulos y generó `dist/index.html` (0.58 kB), CSS (22.65 kB) y JavaScript (302.38 kB).
+- `npm.cmd test -- session`: 2 archivos y 15/15 pruebas aprobadas.
+- `npm.cmd test -- coaching`: 4 archivos y 104/104 pruebas aprobadas.
+- `npm.cmd test`: 33 archivos y 360/360 pruebas aprobadas.
+- `npm.cmd run build`: código 0; Vite 8.1.5 transformó 70 módulos y generó `dist/index.html` (0.58 kB), CSS (22.65 kB) y JavaScript (302.46 kB).
 - `git diff --check`: código 0.
 - Validación de producción pendiente: primer montaje de voz, captura reproducible, análisis y reanálisis deben repetirse en Chrome y Edge después del deployment de este commit. Hasta entonces la versión no está apta para grabar el video final.
 

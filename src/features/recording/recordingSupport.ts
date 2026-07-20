@@ -1,7 +1,9 @@
 export const RECORDING_MIME_CANDIDATES = [
+  'audio/mp4;codecs=mp4a.40.2',
+  'audio/mp4;codecs=opus',
+  'audio/mp4',
   'audio/webm;codecs=opus',
   'audio/webm',
-  'audio/mp4',
 ] as const;
 
 export const MAX_RECORDING_DURATION_MS = 60_000;

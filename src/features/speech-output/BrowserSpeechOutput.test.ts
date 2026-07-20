@@ -147,6 +147,27 @@ describe('BrowserSpeechOutput', () => {
     output.dispose();
   });
 
+  it('mantiene la búsqueda predeterminada más allá del antiguo límite de 2,1 segundos', () => {
+    vi.useFakeTimers();
+    const synthesis = new FakeSpeechSynthesis();
+    const getVoices = vi.spyOn(synthesis, 'getVoices');
+    const output = new BrowserSpeechOutput({
+      synthesis,
+      createUtterance: (text) => new FakeUtterance(text),
+    });
+
+    vi.advanceTimersByTime(2_200);
+    expect(output.getSnapshot().status).toBe('loading_voices');
+    synthesis.voices = [voice()];
+    vi.advanceTimersByTime(500);
+
+    expect(output.getSnapshot().status).toBe('ready');
+    expect(getVoices.mock.calls.length).toBeGreaterThan(6);
+    expect(synthesis.spoken).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+    output.dispose();
+  });
+
   it('limita los reintentos y elimina timers y listeners al desmontar', () => {
     vi.useFakeTimers();
     const synthesis = new FakeSpeechSynthesis();

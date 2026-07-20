@@ -22,7 +22,7 @@ class MockMediaRecorder {
   static constructionError: Error | null = null;
   static instances: MockMediaRecorder[] = [];
   static isTypeSupported = vi.fn(
-    (mimeType: string) => mimeType === 'audio/webm;codecs=opus',
+    (mimeType: string) => mimeType === 'audio/mp4;codecs=mp4a.40.2',
   );
   static startCallCount = 0;
 
@@ -161,10 +161,12 @@ describe('AudioRecorderCard', () => {
     expect(getUserMedia).toHaveBeenCalledTimes(1);
     expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
     expect(MockMediaRecorder.isTypeSupported).toHaveBeenCalledWith(
-      'audio/webm;codecs=opus',
+      'audio/mp4;codecs=mp4a.40.2',
     );
     expect(MockMediaRecorder.startCallCount).toBe(1);
-    expect(screen.getByText(/formato: audio\/webm;codecs=opus/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/formato: audio\/mp4;codecs=mp4a\.40\.2/i),
+    ).toBeInTheDocument();
 
     const recorder = MockMediaRecorder.instances[0];
     expect(recorder).toBeDefined();
