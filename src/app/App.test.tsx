@@ -16,6 +16,17 @@ describe('App', () => {
     expect(screen.getByText('Sin backend')).toBeInTheDocument();
     expect(
       screen.getByRole('heading', {
+        level: 1,
+        name: /sesión guiada de práctica/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /completa cinco intentos válidos con ejercicios de palabra, frase y lectura guiada/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', {
         name: /sesión de cinco intentos válidos/i,
       }),
     ).toBeInTheDocument();

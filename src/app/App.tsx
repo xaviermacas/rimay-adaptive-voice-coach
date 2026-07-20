@@ -21,12 +21,13 @@ export function App() {
 
       <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
         <div className="max-w-4xl">
-          <p className="text-sm font-semibold text-rimay-700">
-            Incremento 7 · Sesión de cinco intentos y adaptación completa
-          </p>
           <h1 className="mt-2 text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
-            Completa una sesión técnica de cinco intentos
+            Sesión guiada de práctica
           </h1>
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-700">
+            Completa cinco intentos válidos con ejercicios de palabra, frase y
+            lectura guiada.
+          </p>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-700">
             Practica los tres tipos de ejercicio y avanza con decisiones locales
             y deterministas. El recorrido conserva sólo resultados técnicos en
