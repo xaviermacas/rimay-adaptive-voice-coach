@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowserSpeechOutput } from './BrowserSpeechOutput';
 import { useSpeechOutput } from './useSpeechOutput';
@@ -69,6 +69,41 @@ function setup() {
 }
 
 describe('useSpeechOutput', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('se habilita en el primer montaje cuando una voz aparece sin voiceschanged', () => {
+    vi.useFakeTimers();
+    const synthesis = new HookSpeechSynthesis();
+    const output = new BrowserSpeechOutput({
+      synthesis,
+      createUtterance: (text) => new HookUtterance(text),
+      voiceRetryDelaysMs: [10],
+    });
+    const { result, unmount } = renderHook(() => useSpeechOutput({ output }));
+
+    expect(result.current.state.status).toBe('loading_voices');
+    synthesis.voices = [
+      {
+        name: 'Ecuador',
+        lang: 'es-EC',
+        localService: true,
+        default: true,
+        voiceURI: 'voice:ec',
+      },
+    ];
+    act(() => {
+      vi.advanceTimersByTime(10);
+    });
+
+    expect(result.current.state.status).toBe('ready');
+    expect(result.current.isAvailable).toBe(true);
+    expect(synthesis.utterances).toHaveLength(0);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('expone ready, speaking y ready al finalizar', async () => {
     const { output, utterances } = setup();
     const { result } = renderHook(() => useSpeechOutput({ output }));

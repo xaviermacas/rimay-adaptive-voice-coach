@@ -520,6 +520,13 @@ describe('AudioRecorderCard', () => {
     expect(
       screen.getByRole('button', { name: 'Analizar nuevamente' }),
     ).toBeEnabled();
+
+    const firstBlob = analyzeAudio.mock.calls[0]?.[0];
+    await user.click(
+      screen.getByRole('button', { name: 'Analizar nuevamente' }),
+    );
+    expect(analyzeAudio).toHaveBeenCalledTimes(2);
+    expect(analyzeAudio.mock.calls[1]?.[0]).toBe(firstBlob);
   });
 
   it('ignora un resultado tardío y libera la URL al desmontar durante el análisis', async () => {

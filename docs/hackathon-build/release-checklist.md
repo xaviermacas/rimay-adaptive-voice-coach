@@ -1,6 +1,6 @@
 # Checklist de versión candidata y entrega
 
-Las casillas marcadas corresponden a evidencia observada en el repositorio o a la validación manual ya confirmada. Las actividades externas de publicación permanecen pendientes.
+Las casillas marcadas corresponden a evidencia observada en el repositorio o a validación manual histórica. Los dos P1 detectados invalidaron el cierre de producción para voz y captura; la versión no vuelve a considerarse validada hasta desplegar este hotfix y repetir Chrome y Edge.
 
 ## Código congelado
 
@@ -8,7 +8,7 @@ La versión candidata se apoya en el incremento 7 cerrado. Cualquier cambio func
 
 - [x] Incrementos 1–7 cerrados.
 - [x] Incrementos 8–9 diferidos como trabajo futuro.
-- [x] Funcionalidad congelada; sin cambios en `src/`.
+- [x] Únicos cambios en `src/`: hotfix mínimo y autorizado de dos P1; sin incrementos 8–9.
 - [x] `package.json` y lockfile sin modificaciones.
 - [x] Cero dependencias nuevas, persistencia, backend, Supabase u OpenAI API.
 
@@ -21,13 +21,30 @@ Ejecutar la matriz completa sobre el árbol documental final. Registrar cantidad
 - [x] `npm.cmd test -- session`: 2 archivos y 15/15 pruebas.
 - [x] `npm.cmd test -- practice`: 9 archivos y 51/51 pruebas.
 - [x] `npm.cmd test -- coaching`: 4 archivos y 104/104 pruebas.
-- [x] `npm.cmd test`: 32 archivos y 339/339 pruebas.
+- [x] `npm.cmd test -- speech-output`: 4 archivos y 35/35 pruebas.
+- [x] `npm.cmd test -- useAudioRecorder AudioRecorderCard`: 3 archivos y 41/41 pruebas.
+- [x] `npm.cmd test -- audio-analysis`: 1 archivo y 6/6 pruebas.
+- [x] `npm.cmd test`: 33 archivos y 358/358 pruebas.
 - [x] `npm.cmd run build`: 70 módulos transformados.
 - [x] `git diff --check`.
 
 ## Validación manual
 
-La validación funcional más reciente ocurrió sobre el incremento 7 en Chrome y Edge. No se deben inventar verificaciones adicionales.
+La validación funcional anterior ocurrió sobre el incremento 7 en Chrome y Edge, pero después se reprodujeron dos P1. Sus resultados no validan el nuevo hotfix; no se deben inventar verificaciones adicionales.
+
+### Revalidación obligatoria del hotfix P1
+
+- [x] Regresión automática: voz disponible aunque aparezca sin un nuevo `voiceschanged`.
+- [x] Regresión automática: último chunk incluido y Blob creado sólo tras el evento `stop`.
+- [x] Regresión automática: reanálisis usa el mismo Blob; capturas tardías o nuevas permanecen aisladas.
+- [ ] Commit del hotfix enviado a `main` y deployment de Vercel asociado al nuevo SHA.
+- [ ] Chrome: “Escuchar instrucción” se habilita en el primer recorrido sin remontar la vista.
+- [ ] Edge: “Escuchar instrucción” se habilita en el primer recorrido sin remontar la vista.
+- [ ] Chrome: grabación de 3–4 s muestra duración reproducible, análisis válido y reanálisis válido.
+- [ ] Edge: grabación de 3–4 s muestra duración reproducible, análisis válido y reanálisis válido.
+- [ ] Console sin errores y Network/Storage sin audio, texto, métricas o persistencia propia durante ambos recorridos.
+- [ ] Micrófono liberado al finalizar, descartar, reemplazar y salir del intento.
+- [ ] Dictamen de producción actualizado; no grabar video mientras alguna comprobación anterior falle.
 
 - [x] Sesión de cinco intentos completada mediante demo en Chrome y Edge.
 - [x] Sesión completada mediante entrada manual en Chrome y Edge.

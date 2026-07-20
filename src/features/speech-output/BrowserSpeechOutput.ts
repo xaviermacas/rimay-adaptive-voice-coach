@@ -14,11 +14,14 @@ interface ActiveSpeechRequest {
 export interface BrowserSpeechOutputOptions {
   readonly synthesis?: SpeechSynthesis | null;
   readonly createUtterance?: ((text: string) => SpeechSynthesisUtterance) | null;
+  readonly voiceRetryDelaysMs?: readonly number[];
 }
 
 type AvailabilityListener = (
   snapshot: SpeechOutputAvailabilitySnapshot,
 ) => void;
+
+const DEFAULT_VOICE_RETRY_DELAYS_MS = [50, 150, 300, 600, 1_000] as const;
 
 function defaultSynthesis(): SpeechSynthesis | null {
   return typeof window === 'undefined' || !('speechSynthesis' in window)
@@ -40,15 +43,38 @@ export class BrowserSpeechOutput implements SpeechOutput {
     | ((text: string) => SpeechSynthesisUtterance)
     | null;
   private readonly listeners = new Set<AvailabilityListener>();
+  private readonly voiceRetryDelaysMs: readonly number[];
+  private readonly focusTarget: Window | null;
+  private readonly visibilityTarget: Document | null;
   private selectedVoice: SpeechSynthesisVoice | null = null;
   private snapshot: SpeechOutputAvailabilitySnapshot;
   private activeRequest: ActiveSpeechRequest | null = null;
   private generation = 0;
   private connected = false;
   private disposed = false;
+  private voiceRetryIndex = 0;
+  private voiceRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly handleVoicesChanged = () => {
+    if (this.selectedVoice !== null) {
+      this.voiceRetryIndex = 0;
+    }
     this.refreshVoices();
+  };
+
+  private readonly handleFocus = () => {
+    if (this.selectedVoice === null) {
+      this.refreshVoices();
+    }
+  };
+
+  private readonly handleVisibilityChange = () => {
+    if (
+      this.selectedVoice === null &&
+      this.visibilityTarget?.visibilityState === 'visible'
+    ) {
+      this.refreshVoices();
+    }
   };
 
   constructor(options: BrowserSpeechOutputOptions = {}) {
@@ -58,6 +84,10 @@ export class BrowserSpeechOutput implements SpeechOutput {
       options.createUtterance === undefined
         ? defaultUtteranceFactory()
         : options.createUtterance;
+    this.voiceRetryDelaysMs =
+      options.voiceRetryDelaysMs ?? DEFAULT_VOICE_RETRY_DELAYS_MS;
+    this.focusTarget = typeof window === 'undefined' ? null : window;
+    this.visibilityTarget = typeof document === 'undefined' ? null : document;
     this.snapshot = {
       status:
         this.synthesis === null || this.createUtterance === null
@@ -81,9 +111,15 @@ export class BrowserSpeechOutput implements SpeechOutput {
       return;
     }
     this.connected = true;
+    this.voiceRetryIndex = 0;
     this.synthesis.addEventListener(
       'voiceschanged',
       this.handleVoicesChanged,
+    );
+    this.focusTarget?.addEventListener('focus', this.handleFocus);
+    this.visibilityTarget?.addEventListener(
+      'visibilitychange',
+      this.handleVisibilityChange,
     );
     this.refreshVoices();
   }
@@ -218,10 +254,18 @@ export class BrowserSpeechOutput implements SpeechOutput {
 
   dispose(): void {
     this.stop();
+    this.cancelVoiceRetry();
     if (this.connected && this.synthesis !== null) {
       this.synthesis.removeEventListener(
         'voiceschanged',
         this.handleVoicesChanged,
+      );
+    }
+    if (this.connected) {
+      this.focusTarget?.removeEventListener('focus', this.handleFocus);
+      this.visibilityTarget?.removeEventListener(
+        'visibilitychange',
+        this.handleVisibilityChange,
       );
     }
     this.connected = false;
@@ -229,7 +273,11 @@ export class BrowserSpeechOutput implements SpeechOutput {
   }
 
   private refreshVoices(): void {
+    if (!this.connected || this.disposed) {
+      return;
+    }
     if (this.synthesis === null || this.createUtterance === null) {
+      this.cancelVoiceRetry();
       this.selectedVoice = null;
       this.setSnapshot({ status: 'unsupported', selectedVoice: null });
       return;
@@ -239,6 +287,7 @@ export class BrowserSpeechOutput implements SpeechOutput {
     try {
       voices = this.synthesis.getVoices();
     } catch {
+      this.cancelVoiceRetry();
       this.selectedVoice = null;
       this.setSnapshot({ status: 'unavailable', selectedVoice: null });
       return;
@@ -246,6 +295,7 @@ export class BrowserSpeechOutput implements SpeechOutput {
 
     const result = selectSpanishVoice(voices);
     if (result.status === 'available') {
+      this.cancelVoiceRetry();
       this.selectedVoice = result.voice;
       this.setSnapshot({
         status: 'ready',
@@ -255,6 +305,11 @@ export class BrowserSpeechOutput implements SpeechOutput {
     }
 
     this.selectedVoice = null;
+    if (result.reason === 'empty_voice_list') {
+      this.scheduleVoiceRetry();
+    } else {
+      this.cancelVoiceRetry();
+    }
     this.setSnapshot({
       status:
         result.reason === 'empty_voice_list'
@@ -262,6 +317,35 @@ export class BrowserSpeechOutput implements SpeechOutput {
           : 'unavailable',
       selectedVoice: null,
     });
+  }
+
+  private scheduleVoiceRetry(): void {
+    if (
+      this.voiceRetryTimer !== null ||
+      this.voiceRetryIndex >= this.voiceRetryDelaysMs.length ||
+      this.selectedVoice !== null ||
+      !this.connected ||
+      this.disposed
+    ) {
+      return;
+    }
+
+    const delayMs = this.voiceRetryDelaysMs[this.voiceRetryIndex];
+    this.voiceRetryIndex += 1;
+    if (delayMs === undefined) {
+      return;
+    }
+    this.voiceRetryTimer = setTimeout(() => {
+      this.voiceRetryTimer = null;
+      this.refreshVoices();
+    }, delayMs);
+  }
+
+  private cancelVoiceRetry(): void {
+    if (this.voiceRetryTimer !== null) {
+      clearTimeout(this.voiceRetryTimer);
+      this.voiceRetryTimer = null;
+    }
   }
 
   private cancelQueue(): void {

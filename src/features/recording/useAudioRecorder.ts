@@ -24,6 +24,7 @@ export interface RecordedAudio {
   blob: Blob;
   durationMs: number;
   mimeType: string;
+  sizeBytes: number;
   url: string;
 }
 
@@ -37,10 +38,36 @@ interface AudioRecorderController {
   stopRecording: () => void;
 }
 
+interface RecordingSession {
+  readonly recorder: MediaRecorder;
+  readonly stream: MediaStream;
+  readonly negotiatedMimeType: string | null;
+  readonly operationId: number;
+  readonly startedAtMs: number;
+  chunks: Blob[];
+  discardResult: boolean;
+  finalized: boolean;
+  stopRequested: boolean;
+  terminalError: RecordingErrorCode | null;
+  totalBytes: number;
+  tracksReleased: boolean;
+}
+
 function stopAllTracks(stream: MediaStream | null): void {
   stream?.getTracks().forEach((track) => {
     track.stop();
   });
+}
+
+function resolveFinalMimeType(session: RecordingSession): string {
+  const recorderMimeType = session.recorder.mimeType.trim();
+  if (recorderMimeType !== '') {
+    return recorderMimeType;
+  }
+  if (session.negotiatedMimeType !== null) {
+    return session.negotiatedMimeType;
+  }
+  return session.chunks[0]?.type ?? '';
 }
 
 export function useAudioRecorder(): AudioRecorderController {
@@ -49,15 +76,11 @@ export function useAudioRecorder(): AudioRecorderController {
   const [recordedAudio, setRecordedAudio] = useState<RecordedAudio | null>(null);
   const [activeMimeType, setActiveMimeType] = useState<string | null>(null);
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const totalBytesRef = useRef(0);
-  const startedAtRef = useRef(0);
+  const sessionRef = useRef<RecordingSession | null>(null);
+  const pendingStreamRef = useRef<MediaStream | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const permissionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioUrlRef = useRef<string | null>(null);
-  const terminalErrorRef = useRef<RecordingErrorCode | null>(null);
   const operationActiveRef = useRef(false);
   const operationIdRef = useRef(0);
   const mountedRef = useRef(true);
@@ -83,15 +106,6 @@ export function useAudioRecorder(): AudioRecorderController {
     }
   }, []);
 
-  const releaseCapture = useCallback(() => {
-    clearDurationTimer();
-    clearPermissionTimer();
-    stopAllTracks(streamRef.current);
-    streamRef.current = null;
-    recorderRef.current = null;
-    operationActiveRef.current = false;
-  }, [clearDurationTimer, clearPermissionTimer]);
-
   const presentError = useCallback((recordingError: RecordingError) => {
     if (mountedRef.current) {
       setError(recordingError);
@@ -100,33 +114,161 @@ export function useAudioRecorder(): AudioRecorderController {
     }
   }, []);
 
-  const finishWithError = useCallback(
-    (code: RecordingErrorCode) => {
-      chunksRef.current = [];
-      totalBytesRef.current = 0;
-      releaseCapture();
-      presentError(createRecordingError(code));
+  const releaseSession = useCallback(
+    (session: RecordingSession) => {
+      if (!session.tracksReleased) {
+        stopAllTracks(session.stream);
+        session.tracksReleased = true;
+      }
+
+      session.recorder.ondataavailable = null;
+      session.recorder.onerror = null;
+      session.recorder.onstop = null;
+
+      if (pendingStreamRef.current === session.stream) {
+        pendingStreamRef.current = null;
+      }
+      if (sessionRef.current === session) {
+        clearDurationTimer();
+        sessionRef.current = null;
+        operationActiveRef.current = false;
+      }
     },
-    [presentError, releaseCapture],
+    [clearDurationTimer],
+  );
+
+  const failSessionImmediately = useCallback(
+    (session: RecordingSession, code: RecordingErrorCode) => {
+      if (session.finalized) {
+        return;
+      }
+      const shouldPublish =
+        mountedRef.current &&
+        !session.discardResult &&
+        sessionRef.current === session &&
+        operationIdRef.current === session.operationId;
+
+      session.finalized = true;
+      session.chunks = [];
+      session.totalBytes = 0;
+      releaseSession(session);
+
+      if (shouldPublish) {
+        presentError(createRecordingError(code));
+      }
+    },
+    [presentError, releaseSession],
+  );
+
+  const finalizeSession = useCallback(
+    (session: RecordingSession) => {
+      if (session.finalized) {
+        return;
+      }
+      session.finalized = true;
+
+      const durationMs = Math.max(0, performance.now() - session.startedAtMs);
+      const chunks = session.chunks.slice();
+      const mimeType = resolveFinalMimeType(session);
+      const terminalError = session.terminalError;
+      const blob = new Blob(
+        chunks,
+        mimeType === '' ? undefined : { type: mimeType },
+      );
+      const shouldPublish =
+        mountedRef.current &&
+        !session.discardResult &&
+        sessionRef.current === session &&
+        operationIdRef.current === session.operationId;
+
+      session.chunks = [];
+      session.totalBytes = 0;
+      releaseSession(session);
+
+      if (!shouldPublish) {
+        return;
+      }
+      if (terminalError !== null) {
+        presentError(createRecordingError(terminalError));
+        return;
+      }
+      if (chunks.length === 0 || blob.size === 0) {
+        presentError(createRecordingError('audio_empty'));
+        return;
+      }
+      if (durationMs < MIN_RECORDING_DURATION_MS) {
+        presentError(createRecordingError('audio_too_short'));
+        return;
+      }
+      if (blob.size > MAX_RECORDING_SIZE_BYTES) {
+        presentError(createRecordingError('file_too_large'));
+        return;
+      }
+
+      try {
+        const url = URL.createObjectURL(blob);
+        audioUrlRef.current = url;
+        setRecordedAudio({
+          blob,
+          durationMs,
+          mimeType: blob.type,
+          sizeBytes: blob.size,
+          url,
+        });
+        setError(null);
+        setStatus('recorded');
+      } catch {
+        presentError(createRecordingError('recording_failed'));
+      }
+    },
+    [presentError, releaseSession],
+  );
+
+  const requestSessionStop = useCallback(
+    (session: RecordingSession) => {
+      if (
+        session.finalized ||
+        session.stopRequested ||
+        session.recorder.state === 'inactive'
+      ) {
+        return;
+      }
+
+      session.stopRequested = true;
+      if (sessionRef.current === session) {
+        clearDurationTimer();
+        if (mountedRef.current && !session.discardResult) {
+          setStatus('processing');
+        }
+      }
+
+      if (
+        session.recorder.state === 'recording' &&
+        typeof session.recorder.requestData === 'function'
+      ) {
+        try {
+          session.recorder.requestData();
+        } catch {
+          // stop() sigue siendo la fuente de finalización y del último chunk.
+        }
+      }
+
+      try {
+        session.recorder.stop();
+      } catch {
+        session.terminalError = 'recording_failed';
+        failSessionImmediately(session, 'recording_failed');
+      }
+    },
+    [clearDurationTimer, failSessionImmediately],
   );
 
   const stopRecording = useCallback(() => {
-    const recorder = recorderRef.current;
-
-    if (recorder === null || recorder.state === 'inactive') {
-      return;
+    const session = sessionRef.current;
+    if (session !== null) {
+      requestSessionStop(session);
     }
-
-    if (mountedRef.current) {
-      setStatus('processing');
-    }
-
-    try {
-      recorder.stop();
-    } catch {
-      finishWithError('recording_failed');
-    }
-  }, [finishWithError]);
+  }, [requestSessionStop]);
 
   const startRecording = useCallback(async () => {
     if (operationActiveRef.current) {
@@ -136,9 +278,6 @@ export function useAudioRecorder(): AudioRecorderController {
     operationActiveRef.current = true;
     const operationId = operationIdRef.current + 1;
     operationIdRef.current = operationId;
-    terminalErrorRef.current = null;
-    chunksRef.current = [];
-    totalBytesRef.current = 0;
     revokeAudioUrl();
     setRecordedAudio(null);
     setError(null);
@@ -153,7 +292,7 @@ export function useAudioRecorder(): AudioRecorderController {
         typeof URL.createObjectURL !== 'function' ||
         typeof URL.revokeObjectURL !== 'function'
       ) {
-        releaseCapture();
+        operationActiveRef.current = false;
         presentError(createRecordingError('browser_unsupported'));
         return;
       }
@@ -173,13 +312,11 @@ export function useAudioRecorder(): AudioRecorderController {
               stopAllTracks(requestedStream);
               return;
             }
-
             if (operationIdRef.current !== operationId) {
               stopAllTracks(requestedStream);
               reject(new DOMException('Recording request is stale', 'AbortError'));
               return;
             }
-
             clearPermissionTimer();
             resolve(requestedStream);
           },
@@ -187,163 +324,136 @@ export function useAudioRecorder(): AudioRecorderController {
             if (requestTimedOut) {
               return;
             }
-
             if (operationIdRef.current !== operationId) {
               reject(requestError);
               return;
             }
-
             clearPermissionTimer();
             reject(requestError);
           },
         );
       });
 
-      if (
-        !mountedRef.current ||
-        operationIdRef.current !== operationId
-      ) {
+      if (!mountedRef.current || operationIdRef.current !== operationId) {
         stopAllTracks(stream);
         return;
       }
 
-      streamRef.current = stream;
+      pendingStreamRef.current = stream;
       const selectedMimeType = selectSupportedMimeType(MediaRecorder);
       const recorder = new MediaRecorder(
         stream,
         selectedMimeType === null ? undefined : { mimeType: selectedMimeType },
       );
+      const session: RecordingSession = {
+        recorder,
+        stream,
+        negotiatedMimeType: selectedMimeType,
+        operationId,
+        startedAtMs: performance.now(),
+        chunks: [],
+        discardResult: false,
+        finalized: false,
+        stopRequested: false,
+        terminalError: null,
+        totalBytes: 0,
+        tracksReleased: false,
+      };
 
-      recorderRef.current = recorder;
-      const runtimeMimeType =
-        recorder.mimeType || selectedMimeType || 'formato predeterminado del navegador';
-      setActiveMimeType(runtimeMimeType);
+      sessionRef.current = session;
+      pendingStreamRef.current = null;
+      setActiveMimeType(
+        recorder.mimeType ||
+          selectedMimeType ||
+          'formato predeterminado del navegador',
+      );
 
       recorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data.size === 0 || terminalErrorRef.current !== null) {
+        if (session.finalized || event.data.size === 0) {
           return;
         }
-
-        chunksRef.current.push(event.data);
-        totalBytesRef.current += event.data.size;
+        session.chunks.push(event.data);
+        session.totalBytes += event.data.size;
 
         if (
-          totalBytesRef.current > MAX_RECORDING_SIZE_BYTES &&
-          recorder.state !== 'inactive'
+          session.totalBytes > MAX_RECORDING_SIZE_BYTES &&
+          session.terminalError === null
         ) {
-          terminalErrorRef.current = 'file_too_large';
-          stopRecording();
+          session.terminalError = 'file_too_large';
+          requestSessionStop(session);
         }
       };
 
       recorder.onerror = () => {
-        terminalErrorRef.current = 'recording_failed';
-
-        if (recorder.state !== 'inactive') {
-          stopRecording();
-        } else {
-          finishWithError('recording_failed');
+        if (session.finalized) {
+          return;
         }
+        session.terminalError = 'recording_failed';
+        requestSessionStop(session);
       };
 
       recorder.onstop = () => {
-        const durationMs = Math.max(0, performance.now() - startedAtRef.current);
-        const terminalError = terminalErrorRef.current;
-        const chunks = chunksRef.current;
-        const mimeType =
-          recorder.mimeType || selectedMimeType || chunks[0]?.type || 'audio/webm';
-
-        releaseCapture();
-        chunksRef.current = [];
-        totalBytesRef.current = 0;
-
-        if (terminalError !== null) {
-          presentError(createRecordingError(terminalError));
-          return;
-        }
-
-        const blob = new Blob(chunks, { type: mimeType });
-
-        if (blob.size === 0) {
-          presentError(createRecordingError('audio_empty'));
-          return;
-        }
-
-        if (durationMs < MIN_RECORDING_DURATION_MS) {
-          presentError(createRecordingError('audio_too_short'));
-          return;
-        }
-
-        if (blob.size > MAX_RECORDING_SIZE_BYTES) {
-          presentError(createRecordingError('file_too_large'));
-          return;
-        }
-
-        try {
-          const url = URL.createObjectURL(blob);
-          audioUrlRef.current = url;
-
-          if (mountedRef.current) {
-            setRecordedAudio({ blob, durationMs, mimeType, url });
-            setError(null);
-            setStatus('recorded');
-          }
-        } catch {
-          presentError(createRecordingError('recording_failed'));
-        }
+        finalizeSession(session);
       };
 
-      startedAtRef.current = performance.now();
       recorder.start(250);
       setStatus('recording');
       recordingTimerRef.current = setTimeout(
-        stopRecording,
+        () => requestSessionStop(session),
         MAX_RECORDING_DURATION_MS,
       );
     } catch (captureError) {
       if (operationIdRef.current !== operationId) {
         return;
       }
-      releaseCapture();
+
+      const session = sessionRef.current;
+      if (session !== null && session.operationId === operationId) {
+        failSessionImmediately(session, 'recording_failed');
+        return;
+      }
+
+      clearPermissionTimer();
+      stopAllTracks(pendingStreamRef.current);
+      pendingStreamRef.current = null;
+      operationActiveRef.current = false;
       presentError(mapCaptureError(captureError));
     }
   }, [
     clearPermissionTimer,
-    finishWithError,
+    failSessionImmediately,
+    finalizeSession,
     presentError,
-    releaseCapture,
+    requestSessionStop,
     revokeAudioUrl,
-    stopRecording,
   ]);
 
   const reset = useCallback(() => {
     operationIdRef.current += 1;
-    terminalErrorRef.current = null;
-    chunksRef.current = [];
-    totalBytesRef.current = 0;
+    operationActiveRef.current = false;
+    clearDurationTimer();
+    clearPermissionTimer();
 
-    const recorder = recorderRef.current;
-    if (recorder !== null) {
-      recorder.ondataavailable = null;
-      recorder.onerror = null;
-      recorder.onstop = null;
-
-      if (recorder.state !== 'inactive') {
-        try {
-          recorder.stop();
-        } catch {
-          // Reset still releases the stream and clears local state.
-        }
-      }
+    const session = sessionRef.current;
+    sessionRef.current = null;
+    if (session !== null && !session.finalized) {
+      session.discardResult = true;
+      requestSessionStop(session);
     }
 
-    releaseCapture();
+    stopAllTracks(pendingStreamRef.current);
+    pendingStreamRef.current = null;
     revokeAudioUrl();
     setRecordedAudio(null);
     setError(null);
     setActiveMimeType(null);
     setStatus('idle');
-  }, [releaseCapture, revokeAudioUrl]);
+  }, [
+    clearDurationTimer,
+    clearPermissionTimer,
+    requestSessionStop,
+    revokeAudioUrl,
+  ]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -351,24 +461,27 @@ export function useAudioRecorder(): AudioRecorderController {
     return () => {
       mountedRef.current = false;
       operationIdRef.current += 1;
+      operationActiveRef.current = false;
       clearDurationTimer();
       clearPermissionTimer();
 
-      const recorder = recorderRef.current;
-      if (recorder !== null) {
-        recorder.ondataavailable = null;
-        recorder.onerror = null;
-        recorder.onstop = null;
-
-        if (recorder.state !== 'inactive') {
-          recorder.stop();
-        }
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      if (session !== null && !session.finalized) {
+        session.discardResult = true;
+        requestSessionStop(session);
       }
 
-      stopAllTracks(streamRef.current);
+      stopAllTracks(pendingStreamRef.current);
+      pendingStreamRef.current = null;
       revokeAudioUrl();
     };
-  }, [clearDurationTimer, clearPermissionTimer, revokeAudioUrl]);
+  }, [
+    clearDurationTimer,
+    clearPermissionTimer,
+    requestSessionStop,
+    revokeAudioUrl,
+  ]);
 
   return {
     activeMimeType,

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BrowserSpeechOutput } from './BrowserSpeechOutput';
 import { SpeechOutputFailure } from './types';
@@ -100,6 +100,108 @@ function setup(voices: SpeechSynthesisVoice[] = [voice()]) {
 }
 
 describe('BrowserSpeechOutput', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('registra voiceschanged antes de consultar las voces inmediatamente', () => {
+    const synthesis = new FakeSpeechSynthesis();
+    const addListener = vi.spyOn(synthesis, 'addEventListener');
+    const getVoices = vi.spyOn(synthesis, 'getVoices');
+
+    const output = new BrowserSpeechOutput({
+      synthesis,
+      createUtterance: (text) => new FakeUtterance(text),
+      voiceRetryDelaysMs: [],
+    });
+
+    expect(addListener).toHaveBeenCalledWith(
+      'voiceschanged',
+      expect.any(Function),
+    );
+    expect(addListener.mock.invocationCallOrder[0]).toBeLessThan(
+      getVoices.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+    output.dispose();
+  });
+
+  it('recupera una voz publicada sin un nuevo voiceschanged mediante reintentos acotados', () => {
+    vi.useFakeTimers();
+    const synthesis = new FakeSpeechSynthesis();
+    const getVoices = vi.spyOn(synthesis, 'getVoices');
+    const output = new BrowserSpeechOutput({
+      synthesis,
+      createUtterance: (text) => new FakeUtterance(text),
+      voiceRetryDelaysMs: [10, 20, 40],
+    });
+
+    synthesis.voices = [voice()];
+    vi.advanceTimersByTime(10);
+
+    expect(output.getSnapshot().status).toBe('ready');
+    expect(getVoices).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(1_000);
+    expect(getVoices).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+    output.dispose();
+  });
+
+  it('limita los reintentos y elimina timers y listeners al desmontar', () => {
+    vi.useFakeTimers();
+    const synthesis = new FakeSpeechSynthesis();
+    const getVoices = vi.spyOn(synthesis, 'getVoices');
+    const removeListener = vi.spyOn(synthesis, 'removeEventListener');
+    const removeWindowListener = vi.spyOn(window, 'removeEventListener');
+    const removeDocumentListener = vi.spyOn(document, 'removeEventListener');
+    const output = new BrowserSpeechOutput({
+      synthesis,
+      createUtterance: (text) => new FakeUtterance(text),
+      voiceRetryDelaysMs: [10, 20],
+    });
+
+    vi.advanceTimersByTime(1_000);
+    expect(getVoices).toHaveBeenCalledTimes(3);
+    expect(vi.getTimerCount()).toBe(0);
+
+    output.dispose();
+
+    expect(removeListener).toHaveBeenCalledWith(
+      'voiceschanged',
+      expect.any(Function),
+    );
+    expect(removeWindowListener).toHaveBeenCalledWith(
+      'focus',
+      expect.any(Function),
+    );
+    expect(removeDocumentListener).toHaveBeenCalledWith(
+      'visibilitychange',
+      expect.any(Function),
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('reconsulta al recuperar foco o visibilidad solo mientras no haya voz seleccionada', () => {
+    const synthesis = new FakeSpeechSynthesis();
+    const getVoices = vi.spyOn(synthesis, 'getVoices');
+    const output = new BrowserSpeechOutput({
+      synthesis,
+      createUtterance: (text) => new FakeUtterance(text),
+      voiceRetryDelaysMs: [],
+    });
+
+    synthesis.voices = [voice()];
+    window.dispatchEvent(new Event('focus'));
+    expect(output.getSnapshot().status).toBe('ready');
+    expect(getVoices).toHaveBeenCalledTimes(2);
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('focus'));
+    expect(getVoices).toHaveBeenCalledTimes(2);
+    expect(synthesis.spoken).toHaveLength(0);
+    output.dispose();
+  });
+
   it('expone soporte ausente y rechaza hablar sin API', async () => {
     const output = new BrowserSpeechOutput({
       synthesis: null,

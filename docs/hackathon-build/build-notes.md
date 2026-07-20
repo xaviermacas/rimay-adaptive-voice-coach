@@ -680,6 +680,38 @@ La revisión pendiente debe inspeccionar las 11 frases y explicaciones, confirma
 - `npm.cmd run build`: código 0; Vite 8.1.5 transformó 70 módulos y generó `dist/index.html` (0.58 kB), CSS (22.65 kB) y JavaScript (299.85 kB).
 - Dependencias y código: `src/`, `package.json` y `package-lock.json` permanecen intactos. No se añadieron persistencia, roles, panel profesional, backend, Supabase, OpenAI API, servicios o dependencias.
 
+## Hotfix P1 de voces y finalización de audio
+
+- Fecha: 2026-07-20.
+- Alcance: corrección mínima y autorizada de dos defectos P1 observados en producción. No se iniciaron los incrementos 8–9, no se añadieron características, servicios o dependencias y `package.json`/`package-lock.json` permanecieron intactos.
+- Estado: la verificación automática local está aprobada. La versión publicada todavía no se considera revalidada; se debe enviar este commit, esperar un deployment nuevo y repetir los recorridos de Chrome y Edge.
+
+### P1 — voces de SpeechSynthesis en el primer montaje
+
+- Causa raíz confirmada: `BrowserSpeechOutput` registraba `voiceschanged` antes de su consulta inmediata, pero, si `getVoices()` devolvía una lista vacía, dependía exclusivamente de otro `voiceschanged`. Si el evento ya había ocurrido o el navegador publicaba voces sin emitirlo nuevamente, el estado permanecía en `loading_voices` hasta remontar el controlador.
+- Corrección: se conserva la política de selección española existente y se añadieron cinco reintentos acotados (50, 150, 300, 600 y 1 000 ms), consulta al recuperar foco o visibilidad sólo mientras no exista una voz seleccionada y cleanup completo de timer/listeners al disponer el controlador. Encontrar una voz española detiene el ciclo; una lista no vacía sin voz española queda `unavailable`, sin fallback silencioso. No existe autoplay ni cambio de foco.
+- Regresión: se prueba el orden listener/consulta, aparición sin `voiceschanged`, límite de reintentos, cleanup, recuperación por foco/visibilidad, ausencia de locución automática y habilitación del hook en el primer montaje.
+
+### P1 — Blob de MediaRecorder no reproducible o decodificable
+
+- Diagnóstico previo: el recorrido anterior sólo publicaba un resultado si el `Blob` tenía `size > 0`; por ello el caso observado en producción no correspondía a `size === 0`, chunks totalmente ausentes o un MIME final vacío. La construcción ya ocurría desde `onstop` y priorizaba `mediaRecorder.mimeType`. Como la versión publicada no conservaba tamaño, MIME ni trazas binarias, no es posible reconstruir forénsicamente los bytes exactos de esa captura después del hecho.
+- Causa raíz confirmada en la implementación: el protocolo de finalización no tenía un latch de stop ni estado aislado por captura. Chunks, tamaño y error terminal vivían en refs compartidas, y `reset`/desmontaje retiraban handlers, vaciaban chunks y detenían tracks inmediatamente, antes del `stop` real. Una captura anterior podía además escribir en los refs de una nueva. El stop normal tampoco solicitaba un flush compatible antes de detener. Esas carreras permitían perder el chunk final o contaminar el ensamblado, produciendo un contenedor positivo en bytes pero técnicamente incompleto.
+- Corrección: cada captura posee una sesión cerrada con recorder, stream, chunks, tamaño, MIME negociado, ID y latch de stop. Los handlers se instalan antes de `start()`, se ignoran chunks vacíos, `requestData()` se intenta con guardas antes de un único `stop()`, el `Blob` sólo se construye después del evento `stop`, y el MIME usa primero `mediaRecorder.mimeType` y luego el negociado. Tracks, chunks y handlers se liberan después de finalizar; resultados obsoletos se descartan sin afectar una sesión nueva. `RecordedAudio` conserva internamente `sizeBytes` y el MIME real. La URL se revoca sólo al descartar, reemplazar o desmontar.
+- Regresión: 14 pruebas dedicadas cubren el último `dataavailable` posterior a la solicitud de stop, creación posterior al chunk final, chunks vacíos, orden completo, MIME real y fallback, doble stop, cleanup diferido, resultados tardíos tras reset/desmontaje, aislamiento entre capturas, Strict Mode, error `audio_empty`, ciclo de URL y tamaño real. La prueba de interfaz confirma además que reanalizar reutiliza exactamente el mismo `Blob`.
+
+### Matriz automática del hotfix
+
+- `npm.cmd run lint`: código 0.
+- `npm.cmd run typecheck`: código 0.
+- `npm.cmd test -- speech-output`: 4 archivos y 35/35 pruebas aprobadas.
+- `npm.cmd test -- useAudioRecorder AudioRecorderCard`: 3 archivos y 41/41 pruebas aprobadas.
+- `npm.cmd test -- audio-analysis`: 1 archivo y 6/6 pruebas aprobadas.
+- `npm.cmd test -- practice`: 9 archivos y 51/51 pruebas aprobadas.
+- `npm.cmd test`: 33 archivos y 358/358 pruebas aprobadas.
+- `npm.cmd run build`: código 0; Vite 8.1.5 transformó 70 módulos y generó `dist/index.html` (0.58 kB), CSS (22.65 kB) y JavaScript (302.38 kB).
+- `git diff --check`: código 0.
+- Validación de producción pendiente: primer montaje de voz, captura reproducible, análisis y reanálisis deben repetirse en Chrome y Edge después del deployment de este commit. Hasta entonces la versión no está apta para grabar el video final.
+
 ## Decisiones confirmadas
 
 | ID | Decisión | Motivo y consecuencia |
